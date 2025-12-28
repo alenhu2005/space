@@ -2,8 +2,8 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>地球運動演示系統 </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>地球運動演示系統 (RWD響應式版)</title>
     <style>
         :root { --bg: #050508; --panel: #121216; --accent: #00e5ff; --gold: #ffd700; --text: #eee; }
         body {
@@ -14,22 +14,25 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow: hidden; /* 禁止整體頁面滾動，保持 App 質感 */
             user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* --- Header --- */
         header {
             height: 45px;
+            flex-shrink: 0; /* 防止被壓縮 */
             padding: 0 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             background: rgba(20,20,25,0.9);
             border-bottom: 1px solid #333;
+            z-index: 10;
         }
-        h2 { margin: 0; font-size: 1rem; color: #fff; letter-spacing: 1px; }
-        .stats { font-family: monospace; font-size: 0.85rem; color: #888; display: flex; gap: 15px; }
+        h2 { margin: 0; font-size: 1rem; color: #fff; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .stats { font-family: monospace; font-size: 0.8rem; color: #888; display: flex; gap: 10px; }
         .stats span { color: var(--gold); font-weight: bold; }
         .stats .highlight { color: var(--accent); }
 
@@ -40,6 +43,8 @@
             position: relative;
             background: #000;
             overflow: hidden;
+            /* 預設為橫向排列 (電腦版) */
+            flex-direction: row; 
         }
         
         .canvas-wrapper {
@@ -47,10 +52,11 @@
             position: relative;
             border-right: 1px solid #333;
             background: radial-gradient(circle at bottom, #1b2735 0%, #090a0f 100%);
+            overflow: hidden;
         }
         .canvas-wrapper:last-child { border-right: none; }
         
-        canvas { display: block; width: 100%; height: 100%; outline: none; }
+        canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
 
         /* --- Overlays --- */
         .view-label {
@@ -61,11 +67,13 @@
             border-left: 3px solid var(--accent);
             pointer-events: none;
             box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            z-index: 5;
         }
 
         .cam-controls {
             position: absolute; top: 10px; right: 10px;
             display: flex; gap: 5px;
+            z-index: 5;
         }
         .btn-cam {
             background: rgba(255,255,255,0.1); border: 1px solid #444;
@@ -76,62 +84,110 @@
 
         .legend {
             position: absolute; bottom: 10px; left: 10px;
-            font-size: 0.75rem; color: #aaa;
-            background: rgba(0,0,0,0.6); padding: 8px; border-radius: 4px;
+            font-size: 0.7rem; color: #aaa;
+            background: rgba(0,0,0,0.6); padding: 6px; border-radius: 4px;
             pointer-events: none;
+            z-index: 5;
         }
-        .legend-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+        .legend-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
         .dot { width: 8px; height: 8px; border-radius: 50%; }
         .line { width: 15px; height: 2px; }
 
         /* --- Controls --- */
         .controls-area {
+            /* 基礎高度 (電腦版) */
             height: 170px; 
+            flex-shrink: 0;
             background: var(--panel);
             border-top: 1px solid #333;
             padding: 10px 20px;
             display: grid;
+            /* 電腦版維持原本的 Grid 設定 */
             grid-template-columns: 260px 1fr 200px;
             gap: 20px;
             box-sizing: border-box;
+            overflow-y: auto; /* 防止內容溢出時無法滾動 */
         }
 
-        .lat-col { display: flex; flex-direction: column; justify-content: space-around; }
+        .lat-col { display: flex; flex-direction: column; justify-content: space-around; gap: 5px; }
         .lat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
         .btn-lat {
             background: rgba(255,255,255,0.05); border: 1px solid transparent;
-            color: #888; padding: 5px 0; font-size: 0.7rem;
+            color: #888; padding: 6px 0; font-size: 0.75rem; /* 稍微加大便於觸控 */
             cursor: pointer; border-radius: 3px; transition: 0.2s;
         }
         .btn-lat:hover { background: rgba(255,255,255,0.15); color: #fff; }
         .btn-lat.active { background: rgba(0, 229, 255, 0.15); color: var(--accent); border-color: var(--accent); font-weight: bold; }
         .lbl-sm { font-size: 0.7rem; color: #666; margin-bottom: 2px; }
 
-        .slider-col { display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+        .slider-col { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
         .slider-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: #ccc; }
-        .lbl-w { width: 80px; text-align: right; font-size: 0.8rem; color: #999; }
+        .lbl-w { width: 80px; text-align: right; font-size: 0.8rem; color: #999; flex-shrink: 0; }
         input[type=range] { flex: 1; height: 4px; background: #333; appearance: none; border-radius: 2px; cursor: pointer; }
-        input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 5px var(--accent); }
-        .val-disp { width: 65px; font-family: monospace; color: var(--gold); }
+        input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 5px var(--accent); border: 2px solid #fff; }
+        .val-disp { width: 60px; font-family: monospace; color: var(--gold); text-align: left; }
 
-        .action-col { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding: 5px 0; }
-        .toggles { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #aaa; }
+        .action-col { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding: 5px 0; gap: 10px; }
+        .toggles { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: #aaa; width: 100%; }
+        .toggles label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
         .btn-play {
-            width: 100%; padding: 8px; border: none; border-radius: 4px;
+            width: 100%; padding: 10px; border: none; border-radius: 4px;
             background: linear-gradient(45deg, #ff9800, #ff5722);
             color: #fff; font-weight: bold; cursor: pointer;
             display: flex; align-items: center; justify-content: center; gap: 5px;
-            transition: 0.3s;
+            transition: 0.3s; font-size: 0.9rem;
         }
         .btn-play:hover { filter: brightness(1.1); }
         .btn-play.playing { background: linear-gradient(45deg, #e53935, #c62828); }
 
+        /* --- RWD Media Queries (針對手機/平板) --- */
+        @media (max-width: 900px) {
+            /* 1. 視圖改為上下排列 */
+            .viewport-container {
+                flex-direction: column;
+            }
+            .canvas-wrapper {
+                border-right: none;
+                border-bottom: 1px solid #333;
+                width: 100%;
+                /* 兩個視圖等高 */
+                flex: 1; 
+            }
+            
+            /* 2. 控制板樣式調整 */
+            .controls-area {
+                height: auto; /* 高度自動，不再固定 170px */
+                max-height: 40vh; /* 限制最大高度，保留空間給畫布 */
+                grid-template-columns: 1fr; /* 改為單欄排列 */
+                gap: 15px;
+                padding: 15px;
+            }
+
+            /* 3. 調整控制區塊順序與寬度 */
+            .lat-col { width: 100%; order: 2; } /* 緯度放第二 */
+            .slider-col { width: 100%; order: 1; } /* 滑桿放第一 (最常用) */
+            .action-col { width: 100%; order: 3; align-items: flex-start; } /* 開關放最後 */
+            
+            .toggles { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+            .toggles label { margin-right: 10px; }
+            .btn-play { margin-top: 5px; }
+
+            /* 4. 隱藏不重要的資訊以節省空間 */
+            header h2 span { display: none; }
+            .stats { font-size: 0.75rem; gap: 8px; }
+        }
+
+        /* 極小螢幕 (iPhone SE 等) */
+        @media (max-width: 380px) {
+             header h2 { font-size: 0.9rem; }
+             .stats { display: none; } /* 空間不夠時隱藏數據，保留乾淨畫面 */
+        }
     </style>
 </head>
 <body>
 
     <header>
-        <h2>太陽運動演示 <span style="font-size:0.7em; opacity:0.6">| Space & Ground View</span></h2>
+        <h2>太陽視運動 <span style="font-size:0.7em; opacity:0.6">| Space & Ground</span></h2>
         <div class="stats">
             <div>LAT <span id="txtLat">23.5°N</span></div>
             <div>TIME <span id="txtTime">12:00</span></div>
@@ -241,10 +297,6 @@
         }
         
         // 預設視角 -90 (面向西)
-        // 右側 (+X) = 北方
-        // 左側 (-X) = 南方
-        // 前方 (+Z/Bottom) = 東方
-        // 後方 (-Z/Top) = 西方
         const cam1 = new Camera(-90, 15);
         const cam2 = new Camera(0, 5); 
 
@@ -285,14 +337,13 @@
             return { x: x, y: y, z: z };
         };
 
-        // --- 左側：天球視角 ---
         function renderObserver() {
             const w = cvs1.width, h = cvs1.height;
+            // 讓手機上的縮放比例自適應，稍微縮小一點避免貼邊
             const scale = Math.min(w, h) * 0.35;
             ctx1.clearRect(0, 0, w, h);
             const proj = (x,y,z) => project(ctx1, x, y, z, w, h, cam1, scale);
 
-            // 地平圈
             ctx1.beginPath();
             for(let i=0; i<=360; i+=2) {
                 let a = rad(i);
@@ -306,13 +357,10 @@
             ctx1.lineWidth = 3; 
             ctx1.stroke();
 
-            // 實心軸
             if(state.opts.showAxis) {
                 ctx1.beginPath();
-                // N-S Axis (X axis)
                 let n = proj(1.1,0,0), s = proj(-1.1,0,0);
                 ctx1.moveTo(n.x, n.y); ctx1.lineTo(s.x, s.y);
-                // E-W Axis (Z axis)
                 let e = proj(0,0,1.1), we = proj(0,0,-1.1);
                 ctx1.moveTo(e.x, e.y); ctx1.lineTo(we.x, we.y);
                 ctx1.setLineDash([]); 
@@ -324,7 +372,6 @@
                 ctx1.fillStyle=c; ctx1.font='bold 14px Arial'; ctx1.textAlign='center'; ctx1.fillText(t,p.x,p.y);
             };
             
-            // N (+X, 右), S (-X, 左), E (+Z, 前/下), W (-Z, 後/上)
             txt('北 (N)', 1.2, 0, 0, '#eee'); 
             txt('南 (S)', -1.2, 0, 0); 
             txt('東 (E)', 0, 0, 1.2); 
@@ -332,7 +379,6 @@
 
             const drawRing = (dec, color, w) => {
                 let prev = null;
-                // 畫完整的 360 度 (-180 到 180)
                 for(let hDeg=-180; hDeg<=180; hDeg+=4) {
                     let pos = celToHor(hDeg, dec, state.lat);
                     let s = proj(pos.x, pos.y, pos.z);
@@ -342,12 +388,11 @@
                         ctx1.strokeStyle = color; 
                         ctx1.lineWidth = w;
                         
-                        // --- 修正：地平線下變虛線 ---
                         if(pos.y < 0) {
-                            ctx1.setLineDash([5, 5]); // 虛線
-                            ctx1.globalAlpha = 0.4;   // 變暗
+                            ctx1.setLineDash([5, 5]); 
+                            ctx1.globalAlpha = 0.4;
                         } else {
-                            ctx1.setLineDash([]);     // 實線
+                            ctx1.setLineDash([]);
                             ctx1.globalAlpha = 1.0;
                         }
 
@@ -356,7 +401,6 @@
                     }
                     prev = {x:s.x, y:s.y};
                 }
-                // 重置狀態
                 ctx1.setLineDash([]);
                 ctx1.globalAlpha = 1.0;
             };
@@ -369,11 +413,9 @@
             }
             drawRing(state.dec, '#ffd700', 3); 
 
-            // Sun Position
             const ha = (state.hour - 12) * 15; 
             const sunPos = celToHor(ha, state.dec, state.lat);
             
-            // 太陽本體與投影線
             const sunS = proj(sunPos.x, sunPos.y, sunPos.z);
             const gS = proj(sunPos.x, 0, sunPos.z);
             
@@ -381,14 +423,12 @@
             ctx1.strokeStyle = 'rgba(255,255,0,0.3)'; ctx1.setLineDash([2,2]); ctx1.stroke(); ctx1.setLineDash([]);
 
             ctx1.beginPath(); ctx1.arc(sunS.x, sunS.y, 8, 0, PI*2);
-            // 晚上太陽變暗一點
             ctx1.fillStyle = sunPos.y < 0 ? '#555' : '#ffd700'; 
             ctx1.fill(); 
             ctx1.strokeStyle = sunPos.y < 0 ? '#888' : '#fff'; 
             ctx1.stroke();
 
             if(state.opts.showAxis) {
-                // 北極軸
                 let p = celToHor(0, 90, state.lat); 
                 let p1 = proj(p.x * 1.3, p.y * 1.3, p.z * 1.3);
                 let p2 = proj(-p.x * 1.3, -p.y * 1.3, -p.z * 1.3);
@@ -401,7 +441,6 @@
             }
         }
 
-        // --- 右側：太空視角 ---
         function renderSpace() {
             const w = cvs2.width, h = cvs2.height;
             const scale = Math.min(w, h) * 0.3;
@@ -418,7 +457,6 @@
                 };
             };
 
-            // 1. 地軸
             let axisLen = 1.4; 
             let np = applyTilt(0, axisLen, 0);
             let sp = applyTilt(0, -axisLen, 0);
@@ -430,11 +468,9 @@
             ctx2.strokeStyle = '#cccccc'; ctx2.lineWidth = 4; ctx2.lineCap = 'round';
             ctx2.setLineDash([]); ctx2.stroke();
 
-            // 2. 地球本體
             ctx2.beginPath(); ctx2.arc(cx, cy, scale, 0, PI*2);
             ctx2.fillStyle = 'rgba(20, 30, 50, 0.8)'; ctx2.fill();
 
-            // 3. 經緯線 (自轉)
             let earthSpin = rad((state.hour - 12) * 15);
             const getSpherePos = (lonDeg, latDeg) => {
                 let effLon = rad(lonDeg) - earthSpin; 
@@ -470,7 +506,6 @@
                 ctx2.strokeStyle = 'rgba(255,255,255,0.1)'; ctx2.lineWidth=1; ctx2.stroke();
             }
 
-            // 4. 觀測者緯度圈
             ctx2.beginPath();
             for(let lon=0; lon<=360; lon+=5) {
                 let la = rad(state.lat), lo = rad(lon);
@@ -480,7 +515,6 @@
             }
             ctx2.strokeStyle = '#0f0'; ctx2.lineWidth=1.5; ctx2.stroke();
 
-            // 5. 光影
             ctx2.save();
             ctx2.beginPath(); ctx2.arc(cx, cy, scale, 0, PI*2); ctx2.clip();
             let shadowGrad = ctx2.createLinearGradient(cx - scale, 0, cx + scale, 0);
@@ -493,7 +527,6 @@
             ctx2.fillRect(0, 0, w, h);
             ctx2.restore();
 
-            // 6. 標籤
             ctx2.font = '11px Arial'; 
             ctx2.textAlign = 'left';
             ctx2.textBaseline = 'middle';
@@ -516,7 +549,6 @@
                 ctx2.fillText(txt, labelX, labelY);
             }
 
-            // 7. 觀測者
             let obsW = getSpherePos(0, state.lat); 
             let obsScr = projS(obsW.x, obsW.y, obsW.z);
             let isNight = obsW.x < -0.05;
