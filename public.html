@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地球運動演示系統 (完美移動版)</title>
+    <title>地球運動演示系統 (全螢幕版)</title>
     <style>
         :root { --bg: #050508; --panel: #121216; --accent: #00e5ff; --gold: #ffd700; --text: #eee; }
         
@@ -14,7 +14,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg);
             color: var(--text);
-            /* 關鍵修正：使用 dvh (Dynamic Viewport Height) 解決手機網址列遮擋問題 */
+            /* 使用 dvh 解決手機網址列遮擋問題 */
             height: 100dvh; 
             width: 100vw;
             display: flex;
@@ -25,10 +25,9 @@
 
         /* --- Header --- */
         header {
-            height: 44px; /* 標準移動端 Header 高度 */
+            height: 44px;
             flex-shrink: 0;
-            padding: 0 15px;
-            /* 頂部安全區域 (避開瀏海) */
+            padding: 0 10px 0 15px;
             padding-top: env(safe-area-inset-top);
             display: flex;
             justify-content: space-between;
@@ -38,25 +37,46 @@
             z-index: 10;
         }
         h2 { margin: 0; font-size: 0.95rem; color: #fff; letter-spacing: 0.5px; white-space: nowrap; }
+        
+        /* Header 右側區域容器 */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
         .stats { font-family: monospace; font-size: 0.75rem; color: #888; display: flex; gap: 8px; }
         .stats span { color: var(--gold); font-weight: bold; }
 
+        /* 全螢幕按鈕樣式 */
+        .btn-fullscreen {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 4px;
+            color: #ccc;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-fullscreen:hover { background: rgba(255,255,255,0.1); color: #fff; border-color: #fff; }
+        .btn-fullscreen svg { width: 16px; height: 16px; fill: currentColor; }
+
         /* --- Main Layout --- */
         .viewport-container {
-            /* 關鍵：flex-grow: 1 佔滿剩餘空間 */
             flex-grow: 1;
-            /* 關鍵：min-height: 0 防止 flex 子元素溢出或塌陷 */
             min-height: 0; 
             display: flex;
             position: relative;
             background: #000;
-            /* 預設橫向 (電腦/橫屏手機) */
             flex-direction: row; 
         }
         
         .canvas-wrapper {
             flex: 1;
-            /* 關鍵：防止內容撐開容器 */
             min-width: 0; 
             min-height: 0;
             position: relative;
@@ -100,13 +120,11 @@
 
         /* --- Controls --- */
         .controls-area {
-            /* 底部安全區域 (避開 iPhone 橫條) */
             padding-bottom: calc(10px + env(safe-area-inset-bottom));
             background: var(--panel);
             border-top: 1px solid #333;
             padding: 10px 15px;
             
-            /* 電腦版佈局 */
             height: 160px;
             flex-shrink: 0;
             display: grid;
@@ -115,7 +133,6 @@
             overflow-y: auto;
         }
 
-        /* 控制元件樣式 */
         .lat-col { display: flex; flex-direction: column; justify-content: space-around; gap: 2px; }
         .lat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
         .btn-lat {
@@ -129,7 +146,7 @@
         .slider-col { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
         .slider-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #ccc; }
         .lbl-w { width: 70px; text-align: right; color: #999; font-size: 0.75rem; }
-        input[type=range] { flex: 1; height: 20px; /* 增加觸控區域 */ background: transparent; -webkit-appearance: none; cursor: pointer; }
+        input[type=range] { flex: 1; height: 20px; background: transparent; -webkit-appearance: none; cursor: pointer; }
         input[type=range]::-webkit-slider-runnable-track { height: 4px; background: #333; border-radius: 2px; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
         .val-disp { width: 55px; font-family: monospace; color: var(--gold); text-align: left; }
@@ -147,27 +164,24 @@
         }
         .btn-play.playing { background: linear-gradient(135deg, #f44336, #d32f2f); }
 
-        /* --- RWD: 直立手機優化 (寬度小於 800px 且是直立狀態) --- */
+        /* --- RWD --- */
         @media (max-width: 800px) and (orientation: portrait) {
-            /* 上下排列 */
             .viewport-container { flex-direction: column; }
             .canvas-wrapper { 
                 border-right: none; 
                 border-bottom: 1px solid #333; 
                 width: 100%;
-                height: 50%; /* 強制平分高度 */
+                height: 50%;
             }
 
-            /* 控制區變為可滑動的單欄 */
             .controls-area {
                 height: auto;
-                max-height: 40vh; /* 避免佔據太多畫面 */
+                max-height: 40vh;
                 grid-template-columns: 1fr;
                 gap: 15px;
                 padding-top: 15px;
             }
 
-            /* 調整順序：滑桿最重要放在最上面 */
             .slider-col { order: 1; }
             .action-col { order: 2; flex-direction: row; align-items: center; gap: 10px; }
             .lat-col    { order: 3; }
@@ -175,13 +189,11 @@
             .toggles { flex-direction: row; flex-wrap: wrap; }
             .btn-play { flex: 1; }
             
-            /* 隱藏次要資訊 */
             header h2 span { display: none; }
         }
 
-        /* --- RWD: 極窄螢幕 (iPhone SE / Fold 外螢幕) --- */
         @media (max-width: 360px) {
-            .stats { display: none; } /* 隱藏數據以保持介面整潔 */
+            .stats { display: none; }
             header h2 { font-size: 0.85rem; }
         }
     </style>
@@ -190,10 +202,18 @@
 
     <header>
         <h2>太陽視運動 <span style="font-size:0.8em; opacity:0.6">演示</span></h2>
-        <div class="stats">
-            <span id="txtLat">23.5°N</span>
-            <span style="color:#666">|</span>
-            <span id="txtTime" style="color:#eee">12:00</span>
+        
+        <div class="header-right">
+            <div class="stats">
+                <span id="txtLat">23.5°N</span>
+                <span style="color:#666">|</span>
+                <span id="txtTime" style="color:#eee">12:00</span>
+            </div>
+            
+            <button id="btnFull" class="btn-fullscreen" onclick="toggleFullScreen()" title="全螢幕">
+                <svg id="iconExpand" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                <svg id="iconCompress" viewBox="0 0 24 24" style="display:none"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+            </button>
         </div>
     </header>
 
@@ -214,7 +234,7 @@
         <div class="canvas-wrapper">
             <div class="view-label">太空視角 (自轉)</div>
             <canvas id="cvsSpace"></canvas>
-            </div>
+        </div>
     </div>
 
     <div class="controls-area">
@@ -335,7 +355,6 @@
 
         function renderObserver() {
             const w = cvs1.width, h = cvs1.height;
-            // 縮放比例稍微調小一點，適應手機小螢幕
             const scale = Math.min(w, h) * 0.32; 
             ctx1.clearRect(0, 0, w, h);
             const proj = (x,y,z) => project(ctx1, x, y, z, w, h, cam1, scale);
@@ -562,6 +581,23 @@
             requestAnimationFrame(loop);
         }
 
+        /* --- Fullscreen Logic --- */
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log("全螢幕請求被拒絕:", err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            const isFull = !!document.fullscreenElement;
+            document.getElementById('iconExpand').style.display = isFull ? 'none' : 'block';
+            document.getElementById('iconCompress').style.display = isFull ? 'block' : 'none';
+        });
+
         ['slLat', 'slSeason', 'slTime', 'slSpeed'].forEach(id => {
             document.getElementById(id).addEventListener('input', () => {
                 if(state.playing && id==='slTime') togglePlay();
@@ -586,7 +622,6 @@
         }
         bindDrag(cvs1, cam1); 
 
-        // 確保在調整視窗大小或旋轉螢幕時重新計算 Canvas 大小
         function resizeCanvas() {
             const w1 = cvs1.parentElement.clientWidth, h1 = cvs1.parentElement.clientHeight;
             cvs1.width = w1; cvs1.height = h1;
@@ -597,7 +632,6 @@
         window.addEventListener('resize', resizeCanvas);
         window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
 
-        // 初始化
         setTimeout(() => { resizeCanvas(); updateState(); }, 50);
 
     </script>
