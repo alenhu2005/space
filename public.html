@@ -2,228 +2,257 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>地球運動演示系統 (RWD響應式版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>地球運動演示系統 (完美移動版)</title>
     <style>
         :root { --bg: #050508; --panel: #121216; --accent: #00e5ff; --gold: #ffd700; --text: #eee; }
+        
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
         body {
             margin: 0; padding: 0;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg);
             color: var(--text);
-            height: 100vh;
+            /* 關鍵修正：使用 dvh (Dynamic Viewport Height) 解決手機網址列遮擋問題 */
+            height: 100dvh; 
+            width: 100vw;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* 禁止整體頁面滾動，保持 App 質感 */
+            overflow: hidden;
             user-select: none;
-            -webkit-tap-highlight-color: transparent;
         }
 
         /* --- Header --- */
         header {
-            height: 45px;
-            flex-shrink: 0; /* 防止被壓縮 */
+            height: 44px; /* 標準移動端 Header 高度 */
+            flex-shrink: 0;
             padding: 0 15px;
+            /* 頂部安全區域 (避開瀏海) */
+            padding-top: env(safe-area-inset-top);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(20,20,25,0.9);
+            background: rgba(20,20,25,0.95);
             border-bottom: 1px solid #333;
             z-index: 10;
         }
-        h2 { margin: 0; font-size: 1rem; color: #fff; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .stats { font-family: monospace; font-size: 0.8rem; color: #888; display: flex; gap: 10px; }
+        h2 { margin: 0; font-size: 0.95rem; color: #fff; letter-spacing: 0.5px; white-space: nowrap; }
+        .stats { font-family: monospace; font-size: 0.75rem; color: #888; display: flex; gap: 8px; }
         .stats span { color: var(--gold); font-weight: bold; }
-        .stats .highlight { color: var(--accent); }
 
         /* --- Main Layout --- */
         .viewport-container {
+            /* 關鍵：flex-grow: 1 佔滿剩餘空間 */
             flex-grow: 1;
+            /* 關鍵：min-height: 0 防止 flex 子元素溢出或塌陷 */
+            min-height: 0; 
             display: flex;
             position: relative;
             background: #000;
-            overflow: hidden;
-            /* 預設為橫向排列 (電腦版) */
+            /* 預設橫向 (電腦/橫屏手機) */
             flex-direction: row; 
         }
         
         .canvas-wrapper {
             flex: 1;
+            /* 關鍵：防止內容撐開容器 */
+            min-width: 0; 
+            min-height: 0;
             position: relative;
             border-right: 1px solid #333;
             background: radial-gradient(circle at bottom, #1b2735 0%, #090a0f 100%);
-            overflow: hidden;
         }
         .canvas-wrapper:last-child { border-right: none; }
         
-        canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+        canvas { display: block; width: 100%; height: 100%; outline: none; }
 
         /* --- Overlays --- */
         .view-label {
             position: absolute; top: 10px; left: 10px;
-            background: rgba(0,0,0,0.8);
-            padding: 4px 10px; border-radius: 4px;
-            font-size: 0.8rem; color: var(--accent);
+            background: rgba(0,0,0,0.7);
+            padding: 3px 8px; border-radius: 4px;
+            font-size: 0.75rem; color: var(--accent);
             border-left: 3px solid var(--accent);
             pointer-events: none;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-            z-index: 5;
         }
 
         .cam-controls {
-            position: absolute; top: 10px; right: 10px;
-            display: flex; gap: 5px;
-            z-index: 5;
+            position: absolute; top: 8px; right: 8px;
+            display: flex; gap: 6px;
         }
         .btn-cam {
-            background: rgba(255,255,255,0.1); border: 1px solid #444;
-            color: #ccc; font-size: 0.7rem; padding: 4px 8px;
-            cursor: pointer; border-radius: 3px; transition: 0.2s;
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+            color: #eee; font-size: 0.7rem; padding: 4px 10px;
+            cursor: pointer; border-radius: 12px; transition: 0.2s;
+            backdrop-filter: blur(4px);
         }
-        .btn-cam:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+        .btn-cam:active { background: var(--accent); color: #000; }
 
         .legend {
-            position: absolute; bottom: 10px; left: 10px;
+            position: absolute; bottom: 8px; left: 8px;
             font-size: 0.7rem; color: #aaa;
-            background: rgba(0,0,0,0.6); padding: 6px; border-radius: 4px;
+            background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px;
             pointer-events: none;
-            z-index: 5;
         }
-        .legend-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; }
-        .line { width: 15px; height: 2px; }
+        .legend-row { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+        .line { width: 12px; height: 2px; }
 
         /* --- Controls --- */
         .controls-area {
-            /* 基礎高度 (電腦版) */
-            height: 170px; 
-            flex-shrink: 0;
+            /* 底部安全區域 (避開 iPhone 橫條) */
+            padding-bottom: calc(10px + env(safe-area-inset-bottom));
             background: var(--panel);
             border-top: 1px solid #333;
-            padding: 10px 20px;
+            padding: 10px 15px;
+            
+            /* 電腦版佈局 */
+            height: 160px;
+            flex-shrink: 0;
             display: grid;
-            /* 電腦版維持原本的 Grid 設定 */
-            grid-template-columns: 260px 1fr 200px;
+            grid-template-columns: 260px 1fr 180px;
             gap: 20px;
-            box-sizing: border-box;
-            overflow-y: auto; /* 防止內容溢出時無法滾動 */
+            overflow-y: auto;
         }
 
-        .lat-col { display: flex; flex-direction: column; justify-content: space-around; gap: 5px; }
+        /* 控制元件樣式 */
+        .lat-col { display: flex; flex-direction: column; justify-content: space-around; gap: 2px; }
         .lat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
         .btn-lat {
-            background: rgba(255,255,255,0.05); border: 1px solid transparent;
-            color: #888; padding: 6px 0; font-size: 0.75rem; /* 稍微加大便於觸控 */
-            cursor: pointer; border-radius: 3px; transition: 0.2s;
+            background: rgba(255,255,255,0.08); border: none;
+            color: #999; padding: 8px 0; font-size: 0.75rem;
+            cursor: pointer; border-radius: 4px;
         }
-        .btn-lat:hover { background: rgba(255,255,255,0.15); color: #fff; }
-        .btn-lat.active { background: rgba(0, 229, 255, 0.15); color: var(--accent); border-color: var(--accent); font-weight: bold; }
-        .lbl-sm { font-size: 0.7rem; color: #666; margin-bottom: 2px; }
+        .btn-lat.active { background: rgba(0, 229, 255, 0.2); color: var(--accent); font-weight: bold; box-shadow: 0 0 0 1px var(--accent) inset; }
+        .lbl-sm { font-size: 0.7rem; color: #666; }
 
         .slider-col { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-        .slider-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: #ccc; }
-        .lbl-w { width: 80px; text-align: right; font-size: 0.8rem; color: #999; flex-shrink: 0; }
-        input[type=range] { flex: 1; height: 4px; background: #333; appearance: none; border-radius: 2px; cursor: pointer; }
-        input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 5px var(--accent); border: 2px solid #fff; }
-        .val-disp { width: 60px; font-family: monospace; color: var(--gold); text-align: left; }
+        .slider-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #ccc; }
+        .lbl-w { width: 70px; text-align: right; color: #999; font-size: 0.75rem; }
+        input[type=range] { flex: 1; height: 20px; /* 增加觸控區域 */ background: transparent; -webkit-appearance: none; cursor: pointer; }
+        input[type=range]::-webkit-slider-runnable-track { height: 4px; background: #333; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+        .val-disp { width: 55px; font-family: monospace; color: var(--gold); text-align: left; }
 
-        .action-col { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding: 5px 0; gap: 10px; }
-        .toggles { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: #aaa; width: 100%; }
-        .toggles label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+        .action-col { display: flex; flex-direction: column; justify-content: space-between; }
+        .toggles { display: flex; flex-direction: column; gap: 8px; font-size: 0.8rem; color: #aaa; }
+        .toggles label { display: flex; align-items: center; gap: 6px; }
         .btn-play {
-            width: 100%; padding: 10px; border: none; border-radius: 4px;
-            background: linear-gradient(45deg, #ff9800, #ff5722);
+            width: 100%; padding: 12px; border: none; border-radius: 6px;
+            background: linear-gradient(135deg, #ff9800, #ff5722);
             color: #fff; font-weight: bold; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; gap: 5px;
-            transition: 0.3s; font-size: 0.9rem;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
-        .btn-play:hover { filter: brightness(1.1); }
-        .btn-play.playing { background: linear-gradient(45deg, #e53935, #c62828); }
+        .btn-play.playing { background: linear-gradient(135deg, #f44336, #d32f2f); }
 
-        /* --- RWD Media Queries (針對手機/平板) --- */
-        @media (max-width: 900px) {
-            /* 1. 視圖改為上下排列 */
-            .viewport-container {
-                flex-direction: column;
-            }
-            .canvas-wrapper {
-                border-right: none;
-                border-bottom: 1px solid #333;
+        /* --- RWD: 直立手機優化 (寬度小於 800px 且是直立狀態) --- */
+        @media (max-width: 800px) and (orientation: portrait) {
+            /* 上下排列 */
+            .viewport-container { flex-direction: column; }
+            .canvas-wrapper { 
+                border-right: none; 
+                border-bottom: 1px solid #333; 
                 width: 100%;
-                /* 兩個視圖等高 */
-                flex: 1; 
+                height: 50%; /* 強制平分高度 */
             }
-            
-            /* 2. 控制板樣式調整 */
+
+            /* 控制區變為可滑動的單欄 */
             .controls-area {
-                height: auto; /* 高度自動，不再固定 170px */
-                max-height: 40vh; /* 限制最大高度，保留空間給畫布 */
-                grid-template-columns: 1fr; /* 改為單欄排列 */
+                height: auto;
+                max-height: 40vh; /* 避免佔據太多畫面 */
+                grid-template-columns: 1fr;
                 gap: 15px;
-                padding: 15px;
+                padding-top: 15px;
             }
 
-            /* 3. 調整控制區塊順序與寬度 */
-            .lat-col { width: 100%; order: 2; } /* 緯度放第二 */
-            .slider-col { width: 100%; order: 1; } /* 滑桿放第一 (最常用) */
-            .action-col { width: 100%; order: 3; align-items: flex-start; } /* 開關放最後 */
-            
-            .toggles { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
-            .toggles label { margin-right: 10px; }
-            .btn-play { margin-top: 5px; }
+            /* 調整順序：滑桿最重要放在最上面 */
+            .slider-col { order: 1; }
+            .action-col { order: 2; flex-direction: row; align-items: center; gap: 10px; }
+            .lat-col    { order: 3; }
 
-            /* 4. 隱藏不重要的資訊以節省空間 */
+            .toggles { flex-direction: row; flex-wrap: wrap; }
+            .btn-play { flex: 1; }
+            
+            /* 隱藏次要資訊 */
             header h2 span { display: none; }
-            .stats { font-size: 0.75rem; gap: 8px; }
         }
 
-        /* 極小螢幕 (iPhone SE 等) */
-        @media (max-width: 380px) {
-             header h2 { font-size: 0.9rem; }
-             .stats { display: none; } /* 空間不夠時隱藏數據，保留乾淨畫面 */
+        /* --- RWD: 極窄螢幕 (iPhone SE / Fold 外螢幕) --- */
+        @media (max-width: 360px) {
+            .stats { display: none; } /* 隱藏數據以保持介面整潔 */
+            header h2 { font-size: 0.85rem; }
         }
     </style>
 </head>
 <body>
 
     <header>
-        <h2>太陽視運動 <span style="font-size:0.7em; opacity:0.6">| Space & Ground</span></h2>
+        <h2>太陽視運動 <span style="font-size:0.8em; opacity:0.6">演示</span></h2>
         <div class="stats">
-            <div>LAT <span id="txtLat">23.5°N</span></div>
-            <div>TIME <span id="txtTime">12:00</span></div>
-            <div>DAY <span id="txtDayLen" class="highlight">--h --m</span></div>
+            <span id="txtLat">23.5°N</span>
+            <span style="color:#666">|</span>
+            <span id="txtTime" style="color:#eee">12:00</span>
         </div>
     </header>
 
     <div class="viewport-container">
         <div class="canvas-wrapper">
-            <div class="view-label">天球視角 (側面剖面圖)</div>
+            <div class="view-label">天球視角 (側視)</div>
             <div class="cam-controls">
-                <button class="btn-cam" onclick="cam1.reset(-90, 15)">側視 (標準)</button>
+                <button class="btn-cam" onclick="cam1.reset(-90, 15)">側視</button>
                 <button class="btn-cam" onclick="cam1.reset(-90, 89)">俯視</button>
             </div>
             <canvas id="cvsObs"></canvas>
             <div class="legend">
-                <div class="legend-row"><i class="line" style="background:var(--accent); height:3px;"></i> 地平圈</div>
-                <div class="legend-row"><i class="line" style="background:cyan; height:1px;"></i> 天球赤道</div>
-                <div class="legend-row"><i class="line" style="background:var(--gold)"></i> 太陽軌跡</div>
+                <div class="legend-row"><i class="line" style="background:var(--accent); height:3px;"></i> 地平</div>
+                <div class="legend-row"><i class="line" style="background:var(--gold)"></i> 軌跡</div>
             </div>
         </div>
 
         <div class="canvas-wrapper">
-            <div class="view-label">太空視角 (地球自轉 - 固定)</div>
+            <div class="view-label">太空視角 (自轉)</div>
             <canvas id="cvsSpace"></canvas>
-            <div class="legend" style="right:10px; left:auto; bottom:10px; text-align:right;">
-                <div class="legend-row" style="justify-content:flex-end;">亮面(白晝) <span style="color:#eee; font-weight:bold;">⮕ 右</span></div>
-                <div class="legend-row" style="justify-content:flex-end;">暗面(夜晚) <span style="color:#555; font-weight:bold;">⬅ 左</span></div>
             </div>
-        </div>
     </div>
 
     <div class="controls-area">
+        <div class="slider-col">
+            <div class="slider-row">
+                <div class="lbl-w">季節</div>
+                <input type="range" id="slSeason" min="-23.5" max="23.5" step="0.1" value="23.5">
+                <div class="val-disp" id="txtSeason">夏至</div>
+            </div>
+            <div class="slider-row">
+                <div class="lbl-w">時間</div>
+                <input type="range" id="slTime" min="0" max="23.95" step="0.05" value="12">
+                <div class="val-disp" id="txtTimeVal">12:00</div>
+            </div>
+            <div class="slider-row">
+                <div class="lbl-w">緯度</div>
+                <input type="range" id="slLat" min="-90" max="90" step="0.5" value="23.5">
+                <div class="val-disp" id="txtLatVal">23.5°</div>
+            </div>
+            <div class="slider-row">
+                <div class="lbl-w">速度</div>
+                <input type="range" id="slSpeed" min="0.1" max="5.0" step="0.1" value="1.0">
+                <div class="val-disp" id="txtSpeed">1.0x</div>
+            </div>
+        </div>
+
+        <div class="action-col">
+            <div class="toggles">
+                <label><input type="checkbox" id="chk3Path" checked> 二分二至</label>
+                <label><input type="checkbox" id="chkEq" checked> 赤道</label>
+                <label><input type="checkbox" id="chkAxis" checked> 地軸</label>
+            </div>
+            <button id="btnPlay" class="btn-play" onclick="togglePlay()"><span>▶</span> 自動播放</button>
+        </div>
+
         <div class="lat-col">
             <div>
-                <div class="lbl-sm">北半球</div>
+                <div class="lbl-sm">北半球快速設定</div>
                 <div class="lat-grid">
                     <button class="btn-lat" onclick="setLat(90)">90</button>
                     <button class="btn-lat" onclick="setLat(66.5)">66.5</button>
@@ -233,7 +262,7 @@
                 </div>
             </div>
             <div>
-                <div class="lbl-sm">南半球</div>
+                <div class="lbl-sm">南半球快速設定</div>
                 <div class="lat-grid">
                     <button class="btn-lat" onclick="setLat(-23.5)">23.5</button>
                     <button class="btn-lat" onclick="setLat(-45)">45</button>
@@ -241,36 +270,6 @@
                     <button class="btn-lat" onclick="setLat(-90)">90</button>
                 </div>
             </div>
-        </div>
-        <div class="slider-col">
-            <div class="slider-row">
-                <div class="lbl-w">季節 (赤緯)</div>
-                <input type="range" id="slSeason" min="-23.5" max="23.5" step="0.1" value="23.5">
-                <div class="val-disp" id="txtSeason">夏至</div>
-            </div>
-            <div class="slider-row">
-                <div class="lbl-w">時間 (0-24)</div>
-                <input type="range" id="slTime" min="0" max="23.95" step="0.05" value="12">
-                <div class="val-disp" id="txtTimeVal">12:00</div>
-            </div>
-            <div class="slider-row">
-                <div class="lbl-w">觀測緯度</div>
-                <input type="range" id="slLat" min="-90" max="90" step="0.5" value="23.5">
-                <div class="val-disp" id="txtLatVal">23.5°</div>
-            </div>
-            <div class="slider-row">
-                <div class="lbl-w">自動速度</div>
-                <input type="range" id="slSpeed" min="0.1" max="5.0" step="0.1" value="1.0">
-                <div class="val-disp" id="txtSpeed">1.0x</div>
-            </div>
-        </div>
-        <div class="action-col">
-            <div class="toggles">
-                <label><input type="checkbox" id="chk3Path" checked> 二分二至軌跡</label>
-                <label><input type="checkbox" id="chkEq" checked> 天球赤道</label>
-                <label><input type="checkbox" id="chkAxis" checked> 地軸與連線</label>
-            </div>
-            <button id="btnPlay" class="btn-play" onclick="togglePlay()"><span>▶</span> 自動播放</button>
         </div>
     </div>
 
@@ -296,7 +295,6 @@
             reset(az, el) { this.az = az; this.el = el; render(); }
         }
         
-        // 預設視角 -90 (面向西)
         const cam1 = new Camera(-90, 15);
         const cam2 = new Camera(0, 5); 
 
@@ -329,18 +327,16 @@
             const h = rad(haDeg);
             const d = rad(decDeg);
             const L = rad(latDeg);
-
             const y = sin(L)*sin(d) + cos(L)*cos(d)*cos(h);
             const x = cos(L)*sin(d) - sin(L)*cos(d)*cos(h);
             const z = -cos(d)*sin(h);
-
             return { x: x, y: y, z: z };
         };
 
         function renderObserver() {
             const w = cvs1.width, h = cvs1.height;
-            // 讓手機上的縮放比例自適應，稍微縮小一點避免貼邊
-            const scale = Math.min(w, h) * 0.35;
+            // 縮放比例稍微調小一點，適應手機小螢幕
+            const scale = Math.min(w, h) * 0.32; 
             ctx1.clearRect(0, 0, w, h);
             const proj = (x,y,z) => project(ctx1, x, y, z, w, h, cam1, scale);
 
@@ -371,38 +367,28 @@
                 let p = proj(x,y,z);
                 ctx1.fillStyle=c; ctx1.font='bold 14px Arial'; ctx1.textAlign='center'; ctx1.fillText(t,p.x,p.y);
             };
-            
-            txt('北 (N)', 1.2, 0, 0, '#eee'); 
-            txt('南 (S)', -1.2, 0, 0); 
-            txt('東 (E)', 0, 0, 1.2); 
-            txt('西 (W)', 0, 0, -1.2);
+            txt('北 (N)', 1.25, 0, 0, '#eee'); 
+            txt('南 (S)', -1.25, 0, 0); 
+            txt('東 (E)', 0, 0, 1.25); 
+            txt('西 (W)', 0, 0, -1.25);
 
             const drawRing = (dec, color, w) => {
                 let prev = null;
                 for(let hDeg=-180; hDeg<=180; hDeg+=4) {
                     let pos = celToHor(hDeg, dec, state.lat);
                     let s = proj(pos.x, pos.y, pos.z);
-
                     if(prev) {
                         ctx1.beginPath(); 
                         ctx1.strokeStyle = color; 
                         ctx1.lineWidth = w;
-                        
-                        if(pos.y < 0) {
-                            ctx1.setLineDash([5, 5]); 
-                            ctx1.globalAlpha = 0.4;
-                        } else {
-                            ctx1.setLineDash([]);
-                            ctx1.globalAlpha = 1.0;
-                        }
-
+                        if(pos.y < 0) { ctx1.setLineDash([5, 5]); ctx1.globalAlpha = 0.4; } 
+                        else { ctx1.setLineDash([]); ctx1.globalAlpha = 1.0; }
                         ctx1.moveTo(prev.x, prev.y); ctx1.lineTo(s.x, s.y); 
                         ctx1.stroke();
                     }
                     prev = {x:s.x, y:s.y};
                 }
-                ctx1.setLineDash([]);
-                ctx1.globalAlpha = 1.0;
+                ctx1.setLineDash([]); ctx1.globalAlpha = 1.0;
             };
 
             if(state.opts.showEq) drawRing(0, 'cyan', 1);
@@ -415,7 +401,6 @@
 
             const ha = (state.hour - 12) * 15; 
             const sunPos = celToHor(ha, state.dec, state.lat);
-            
             const sunS = proj(sunPos.x, sunPos.y, sunPos.z);
             const gS = proj(sunPos.x, 0, sunPos.z);
             
@@ -424,20 +409,14 @@
 
             ctx1.beginPath(); ctx1.arc(sunS.x, sunS.y, 8, 0, PI*2);
             ctx1.fillStyle = sunPos.y < 0 ? '#555' : '#ffd700'; 
-            ctx1.fill(); 
-            ctx1.strokeStyle = sunPos.y < 0 ? '#888' : '#fff'; 
-            ctx1.stroke();
+            ctx1.fill(); ctx1.strokeStyle = sunPos.y < 0 ? '#888' : '#fff'; ctx1.stroke();
 
             if(state.opts.showAxis) {
                 let p = celToHor(0, 90, state.lat); 
                 let p1 = proj(p.x * 1.3, p.y * 1.3, p.z * 1.3);
                 let p2 = proj(-p.x * 1.3, -p.y * 1.3, -p.z * 1.3);
-                
                 ctx1.beginPath(); ctx1.moveTo(p1.x, p1.y); ctx1.lineTo(p2.x, p2.y);
                 ctx1.setLineDash([]); ctx1.strokeStyle='#fff'; ctx1.lineWidth=1; ctx1.stroke();
-                
-                ctx1.fillStyle='#fff'; ctx1.textAlign='left'; 
-                ctx1.fillText("北極軸", p1.x + 5, p1.y);
             }
         }
 
@@ -447,15 +426,8 @@
             ctx2.clearRect(0, 0, w, h);
             const cx = w/2, cy = h/2;
             const projS = (x,y,z) => project(ctx2, x, y, z, w, h, cam2, scale);
-            
             const tilt = rad(-state.dec);
-            const applyTilt = (x, y, z) => {
-                return {
-                    x: x * cos(tilt) - y * sin(tilt),
-                    y: x * sin(tilt) + y * cos(tilt),
-                    z: z
-                };
-            };
+            const applyTilt = (x, y, z) => ({ x: x * cos(tilt) - y * sin(tilt), y: x * sin(tilt) + y * cos(tilt), z: z });
 
             let axisLen = 1.4; 
             let np = applyTilt(0, axisLen, 0);
@@ -463,10 +435,8 @@
             let npS = projS(np.x, np.y, np.z);
             let spS = projS(sp.x, sp.y, sp.z);
 
-            ctx2.beginPath(); 
-            ctx2.moveTo(npS.x, npS.y); ctx2.lineTo(spS.x, spS.y);
-            ctx2.strokeStyle = '#cccccc'; ctx2.lineWidth = 4; ctx2.lineCap = 'round';
-            ctx2.setLineDash([]); ctx2.stroke();
+            ctx2.beginPath(); ctx2.moveTo(npS.x, npS.y); ctx2.lineTo(spS.x, spS.y);
+            ctx2.strokeStyle = '#cccccc'; ctx2.lineWidth = 4; ctx2.lineCap = 'round'; ctx2.stroke();
 
             ctx2.beginPath(); ctx2.arc(cx, cy, scale, 0, PI*2);
             ctx2.fillStyle = 'rgba(20, 30, 50, 0.8)'; ctx2.fill();
@@ -488,11 +458,8 @@
                     let s = projS(p.x, p.y, p.z);
                     if(lat===-90) ctx2.moveTo(s.x, s.y); else ctx2.lineTo(s.x, s.y);
                 }
-                if(lon===0) {
-                    ctx2.strokeStyle = '#00ffff'; ctx2.lineWidth = 2;
-                } else {
-                    ctx2.strokeStyle = 'rgba(255,255,255,0.15)'; ctx2.lineWidth = 1;
-                }
+                ctx2.strokeStyle = (lon===0) ? '#00ffff' : 'rgba(255,255,255,0.15)'; 
+                ctx2.lineWidth = (lon===0) ? 2 : 1;
                 ctx2.stroke();
             }
             
@@ -523,31 +490,7 @@
             shadowGrad.addColorStop(0.5, 'rgba(0,0,0,0.5)'); 
             shadowGrad.addColorStop(0.52, 'rgba(0,0,0,0)');
             shadowGrad.addColorStop(1.0, 'rgba(0,0,0,0)');
-            ctx2.fillStyle = shadowGrad;
-            ctx2.fillRect(0, 0, w, h);
-            ctx2.restore();
-
-            ctx2.font = '11px Arial'; 
-            ctx2.textAlign = 'left';
-            ctx2.textBaseline = 'middle';
-            
-            for(let lat of [-60, -30, 0, 30, 60]) {
-                let pLabel = applyTilt(cos(rad(lat)), sin(rad(lat)), 0);
-                let sLabel = projS(pLabel.x, pLabel.y, pLabel.z);
-                
-                let labelX = sLabel.x + 8; 
-                let labelY = sLabel.y;
-
-                let txt = Math.abs(lat) + "°";
-                if(lat>0) txt+="N"; if(lat<0) txt+="S";
-                
-                let tw = ctx2.measureText(txt).width;
-                ctx2.fillStyle = 'rgba(0,0,0,0.6)';
-                ctx2.fillRect(labelX - 2, labelY - 6, tw + 4, 12);
-                
-                ctx2.fillStyle = '#ddd'; 
-                ctx2.fillText(txt, labelX, labelY);
-            }
+            ctx2.fillStyle = shadowGrad; ctx2.fillRect(0, 0, w, h); ctx2.restore();
 
             let obsW = getSpherePos(0, state.lat); 
             let obsScr = projS(obsW.x, obsW.y, obsW.z);
@@ -561,23 +504,14 @@
             ctx2.strokeStyle = 'magenta'; ctx2.lineWidth=2; ctx2.stroke();
 
             ctx2.beginPath(); ctx2.arc(obsScr.x, obsScr.y, 6, 0, PI*2);
-            ctx2.fillStyle = isNight ? '#555' : '#f0f'; 
-            ctx2.fill(); 
-            ctx2.strokeStyle = isNight ? '#999' : '#fff'; 
-            ctx2.lineWidth = 2; ctx2.stroke();
-
-            if(isNight) {
-                ctx2.fillStyle='#aaa'; ctx2.textAlign='center'; ctx2.fillText('Night', obsScr.x, obsScr.y - 10);
-            }
-
+            ctx2.fillStyle = isNight ? '#555' : '#f0f'; ctx2.fill(); 
+            ctx2.strokeStyle = isNight ? '#999' : '#fff'; ctx2.stroke();
+            
             ctx2.font="bold 14px Arial"; ctx2.fillStyle="#fff"; ctx2.textAlign="center";
             ctx2.fillText("N", npS.x, npS.y - 10);
         }
 
-        function render() {
-            renderObserver();
-            renderSpace();
-        }
+        function render() { renderObserver(); renderSpace(); }
 
         function updateState() {
             state.lat = parseFloat(document.getElementById('slLat').value);
@@ -592,8 +526,7 @@
 
             const latDir = state.lat>=0?'N':'S';
             document.getElementById('txtLat').innerText = Math.abs(state.lat).toFixed(1)+ "°" + latDir;
-            document.getElementById('txtLatVal').innerText = Math.abs(state.lat).toFixed(1)+ "°";
-
+            
             const h=Math.floor(state.hour), m=Math.floor((state.hour-h)*60);
             const tStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
             document.getElementById('txtTime').innerText = tStr;
@@ -606,12 +539,6 @@
             if(Math.abs(state.dec+23.5)<1) sTxt="冬至";
             if(Math.abs(state.dec)<1) sTxt="春秋分";
             document.getElementById('txtSeason').innerText = sTxt;
-
-            let val = -Math.tan(rad(state.lat)) * Math.tan(rad(state.dec));
-            let dayH = 0;
-            if(val >= 1) dayH = 0; else if(val <= -1) dayH = 24; else dayH = deg(Math.acos(val)) * 2 / 15;
-            let dh = Math.floor(dayH), dm = Math.floor((dayH - dh)*60);
-            document.getElementById('txtDayLen').innerText = `${dh}h ${dm}m`;
 
             document.querySelectorAll('.btn-lat').forEach(b => b.classList.remove('active'));
             render();
@@ -628,9 +555,7 @@
             if(!state.playing) return;
             const dt = now - state.lastTime;
             state.lastTime = now;
-            
             state.hour += (dt / 200) * state.speed;
-            
             if(state.hour >= 24) state.hour = 0;
             document.getElementById('slTime').value = state.hour;
             updateState();
@@ -661,15 +586,19 @@
         }
         bindDrag(cvs1, cam1); 
 
-        window.addEventListener('resize', () => {
+        // 確保在調整視窗大小或旋轉螢幕時重新計算 Canvas 大小
+        function resizeCanvas() {
             const w1 = cvs1.parentElement.clientWidth, h1 = cvs1.parentElement.clientHeight;
             cvs1.width = w1; cvs1.height = h1;
             const w2 = cvs2.parentElement.clientWidth, h2 = cvs2.parentElement.clientHeight;
             cvs2.width = w2; cvs2.height = h2;
             render();
-        });
+        }
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
 
-        setTimeout(() => { window.dispatchEvent(new Event('resize')); updateState(); }, 50);
+        // 初始化
+        setTimeout(() => { resizeCanvas(); updateState(); }, 50);
 
     </script>
 </body>
