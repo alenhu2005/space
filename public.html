@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地球運動演示系統 (手勢防誤觸版)</title>
+    <title>地球運動演示系統 (標示增強版)</title>
     <style>
         :root { --bg: #050508; --panel: #121216; --accent: #00e5ff; --gold: #ffd700; --text: #eee; }
         
@@ -20,7 +20,6 @@
             flex-direction: column;
             overflow: hidden;
             user-select: none;
-            /* [重要修正] 禁止整頁的彈性滾動效果 (Rubber-banding) 和下拉刷新 */
             overscroll-behavior: none; 
         }
 
@@ -59,7 +58,6 @@
             position: relative;
             background: #000;
             flex-direction: row;
-            /* [重要修正] 禁止容器本身的滾動行為 */
             touch-action: none; 
         }
         
@@ -68,14 +66,12 @@
             position: relative;
             border-right: 1px solid #333;
             background: radial-gradient(circle at bottom, #1b2735 0%, #090a0f 100%);
-            /* [重要修正] 讓 Canvas 區域完全接管觸控，瀏覽器不准插手 */
             touch-action: none; 
         }
         .canvas-wrapper:last-child { border-right: none; }
         
         canvas { 
             display: block; width: 100%; height: 100%; outline: none; 
-            /* [重要修正] 再強調一次，Canvas 禁止瀏覽器手勢 */
             touch-action: none; 
         }
 
@@ -108,8 +104,7 @@
             background: var(--panel); border-top: 1px solid #333; padding: 10px 15px;
             height: 160px; flex-shrink: 0;
             display: grid; grid-template-columns: 260px 1fr 180px; gap: 20px;
-            overflow-y: auto; /* 這裡需要允許捲動 */
-            /* [重要修正] 這裡使用 contain，防止捲動到頂部/底部時觸發整頁刷新 */
+            overflow-y: auto; 
             overscroll-behavior: contain; 
             -webkit-overflow-scrolling: touch;
         }
@@ -445,6 +440,53 @@
             ctx2.fillStyle = isNight ? '#555' : '#f0f'; ctx2.fill(); ctx2.strokeStyle = isNight ? '#999' : '#fff'; ctx2.stroke();
             
             ctx2.font="bold 14px Arial"; ctx2.fillStyle="#fff"; ctx2.textAlign="center"; ctx2.fillText("N", npS.x, npS.y - 10);
+
+            // 繪製加強版緯度標籤 (拉出引導線)
+            ctx2.textAlign = 'left'; ctx2.textBaseline = 'middle'; ctx2.font = 'bold 12px Arial';
+            const latLabels = [
+                { lat: 66.5, t: '66.5°N' },
+                { lat: 23.5, t: '23.5°N' },
+                { lat: 0, t: '0°' },
+                { lat: -23.5, t: '23.5°S' },
+                { lat: -66.5, t: '66.5°S' }
+            ];
+
+            for (let l of latLabels) {
+                // 計算緯度圈右側邊緣點 (lon = 90度時，但因為自轉會變，我們直接取幾何邊緣)
+                // 這裡簡單取 (scale * cos(lat), scale * sin(lat)) 做傾角旋轉
+                // 這裡直接取右側極限點 x=1, y=0, z=0 轉 lat ? 不對
+                // 簡單作法：計算該緯度在 2D 投影中最右側的點
+                // 由於 tilt 只是繞 Z 旋轉 (在 2D 上)，我們可以取 (cos(lat), sin(lat)) 旋轉 tilt
+                
+                let rLat = cos(rad(l.lat));
+                let yLat = sin(rad(l.lat));
+                // 這是未傾斜時右側邊緣 (x=rLat, y=yLat, z=0)
+                // 套用傾角
+                let p = applyTilt(rLat, yLat, 0);
+                let s = projS(p.x, p.y, p.z);
+
+                // 畫引導線向右延伸
+                let labelX = s.x + 15; 
+                let labelY = s.y;
+                
+                ctx2.beginPath();
+                ctx2.moveTo(s.x, s.y);
+                ctx2.lineTo(labelX - 3, labelY);
+                ctx2.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx2.lineWidth = 1;
+                ctx2.stroke();
+
+                // 畫文字背景
+                let tw = ctx2.measureText(l.t).width;
+                ctx2.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx2.fillRect(labelX - 2, labelY - 7, tw + 4, 14);
+
+                // 畫文字
+                ctx2.fillStyle = '#ddd';
+                if(Math.abs(l.lat) === 23.5) ctx2.fillStyle = '#ffd700'; // 回歸線金色
+                if(l.lat === 0) ctx2.fillStyle = '#00ffff'; // 赤道青色
+                ctx2.fillText(l.t, labelX, labelY);
+            }
         }
 
         function render() { renderObserver(); renderSpace(); }
@@ -461,6 +503,8 @@
 
             const latDir = state.lat>=0?'N':'S';
             document.getElementById('txtLat').innerText = Math.abs(state.lat).toFixed(1)+ "°" + latDir;
+            // [修復] 更新滑桿旁的緯度數值顯示
+            document.getElementById('txtLatVal').innerText = Math.abs(state.lat).toFixed(1)+ "°";
             
             const h=Math.floor(state.hour), m=Math.floor((state.hour-h)*60);
             const tStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
@@ -521,7 +565,6 @@
             const start = (e) => { cam.dragging = true; cam.lx = e.clientX||e.touches[0].clientX; cam.ly = e.clientY||e.touches[0].clientY; };
             const move = (e) => {
                 if(!cam.dragging) return;
-                // [關鍵] 在拖曳 Canvas 時阻止瀏覽器預設滾動
                 if(e.cancelable) e.preventDefault(); 
                 let x = e.clientX||e.touches[0].clientX, y = e.clientY||e.touches[0].clientY;
                 cam.az -= (x - cam.lx)*0.5; cam.el += (y - cam.ly)*0.5;
