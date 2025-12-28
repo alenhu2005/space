@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地球運動演示系統 (標示增強版)</title>
+    <title>地球運動演示系統 (含晝長顯示)</title>
     <style>
         :root { --bg: #050508; --panel: #121216; --accent: #00e5ff; --gold: #ffd700; --text: #eee; }
         
@@ -38,9 +38,21 @@
         }
         h2 { margin: 0; font-size: 0.95rem; color: #fff; letter-spacing: 0.5px; white-space: nowrap; }
         
-        .header-right { display: flex; align-items: center; gap: 15px; }
-        .stats { font-family: monospace; font-size: 0.75rem; color: #888; display: flex; gap: 8px; }
-        .stats span { color: var(--gold); font-weight: bold; }
+        .header-right { display: flex; align-items: center; gap: 10px; }
+        
+        /* 資訊欄樣式調整 */
+        .stats { 
+            font-family: monospace; 
+            font-size: 0.75rem; 
+            color: #888; 
+            display: flex; 
+            gap: 8px; 
+            align-items: center;
+        }
+        .stats span { color: #eee; }
+        .stats .gold { color: var(--gold); font-weight: bold; }
+        .stats .cyan { color: var(--accent); font-weight: bold; }
+        .sep { color: #444; }
 
         .btn-fullscreen {
             background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
@@ -52,28 +64,18 @@
 
         /* --- Main Layout --- */
         .viewport-container {
-            flex-grow: 1;
-            min-height: 0; 
-            display: flex;
-            position: relative;
-            background: #000;
-            flex-direction: row;
-            touch-action: none; 
+            flex-grow: 1; min-height: 0; display: flex; position: relative;
+            background: #000; flex-direction: row; touch-action: none; 
         }
         
         .canvas-wrapper {
-            flex: 1; min-width: 0; min-height: 0;
-            position: relative;
-            border-right: 1px solid #333;
-            background: radial-gradient(circle at bottom, #1b2735 0%, #090a0f 100%);
+            flex: 1; min-width: 0; min-height: 0; position: relative;
+            border-right: 1px solid #333; background: radial-gradient(circle at bottom, #1b2735 0%, #090a0f 100%);
             touch-action: none; 
         }
         .canvas-wrapper:last-child { border-right: none; }
         
-        canvas { 
-            display: block; width: 100%; height: 100%; outline: none; 
-            touch-action: none; 
-        }
+        canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
 
         /* --- Overlays --- */
         .view-label {
@@ -104,9 +106,7 @@
             background: var(--panel); border-top: 1px solid #333; padding: 10px 15px;
             height: 160px; flex-shrink: 0;
             display: grid; grid-template-columns: 260px 1fr 180px; gap: 20px;
-            overflow-y: auto; 
-            overscroll-behavior: contain; 
-            -webkit-overflow-scrolling: touch;
+            overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
         }
 
         .lat-col { display: flex; flex-direction: column; justify-content: space-around; gap: 2px; }
@@ -135,6 +135,7 @@
         }
         .btn-play.playing { background: linear-gradient(135deg, #f44336, #d32f2f); }
 
+        /* --- RWD --- */
         @media (max-width: 800px) and (orientation: portrait) {
             .viewport-container { flex-direction: column; }
             .canvas-wrapper { border-right: none; border-bottom: 1px solid #333; width: 100%; height: 50%; }
@@ -145,8 +146,16 @@
             .toggles { flex-direction: row; flex-wrap: wrap; }
             .btn-play { flex: 1; }
             header h2 span { display: none; }
+            
+            /* 手機版資訊欄縮小字體以容納更多內容 */
+            .stats { font-size: 0.65rem; gap: 5px; }
         }
-        @media (max-width: 360px) { .stats { display: none; } header h2 { font-size: 0.85rem; } }
+        
+        /* 極窄螢幕處理 */
+        @media (max-width: 360px) { 
+            header h2 { display: none; } /* 隱藏標題，只顯示數據 */
+            .header-right { width: 100%; justify-content: space-between; }
+        }
     </style>
 </head>
 <body>
@@ -155,9 +164,12 @@
         <div class="header-right">
             <div class="stats">
                 <span id="txtLat">23.5°N</span>
-                <span style="color:#666">|</span>
-                <span id="txtTime" style="color:#eee">12:00</span>
+                <span class="sep">|</span>
+                <span id="txtTime" class="gold">12:00</span>
+                <span class="sep">|</span>
+                <span id="txtDayLen" class="cyan">晝長 13h 13m</span>
             </div>
+            
             <button id="btnFull" class="btn-fullscreen" onclick="toggleFullScreen()" title="全螢幕">
                 <svg id="iconExpand" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
                 <svg id="iconCompress" viewBox="0 0 24 24" style="display:none"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
@@ -441,7 +453,7 @@
             
             ctx2.font="bold 14px Arial"; ctx2.fillStyle="#fff"; ctx2.textAlign="center"; ctx2.fillText("N", npS.x, npS.y - 10);
 
-            // 繪製加強版緯度標籤 (拉出引導線)
+            // 繪製緯度標籤
             ctx2.textAlign = 'left'; ctx2.textBaseline = 'middle'; ctx2.font = 'bold 12px Arial';
             const latLabels = [
                 { lat: 66.5, t: '66.5°N' },
@@ -452,39 +464,20 @@
             ];
 
             for (let l of latLabels) {
-                // 計算緯度圈右側邊緣點 (lon = 90度時，但因為自轉會變，我們直接取幾何邊緣)
-                // 這裡簡單取 (scale * cos(lat), scale * sin(lat)) 做傾角旋轉
-                // 這裡直接取右側極限點 x=1, y=0, z=0 轉 lat ? 不對
-                // 簡單作法：計算該緯度在 2D 投影中最右側的點
-                // 由於 tilt 只是繞 Z 旋轉 (在 2D 上)，我們可以取 (cos(lat), sin(lat)) 旋轉 tilt
-                
                 let rLat = cos(rad(l.lat));
                 let yLat = sin(rad(l.lat));
-                // 這是未傾斜時右側邊緣 (x=rLat, y=yLat, z=0)
-                // 套用傾角
                 let p = applyTilt(rLat, yLat, 0);
                 let s = projS(p.x, p.y, p.z);
-
-                // 畫引導線向右延伸
-                let labelX = s.x + 15; 
-                let labelY = s.y;
+                let labelX = s.x + 15; let labelY = s.y;
                 
-                ctx2.beginPath();
-                ctx2.moveTo(s.x, s.y);
-                ctx2.lineTo(labelX - 3, labelY);
-                ctx2.strokeStyle = 'rgba(255,255,255,0.5)';
-                ctx2.lineWidth = 1;
-                ctx2.stroke();
+                ctx2.beginPath(); ctx2.moveTo(s.x, s.y); ctx2.lineTo(labelX - 3, labelY);
+                ctx2.strokeStyle = 'rgba(255,255,255,0.5)'; ctx2.lineWidth = 1; ctx2.stroke();
 
-                // 畫文字背景
                 let tw = ctx2.measureText(l.t).width;
-                ctx2.fillStyle = 'rgba(0,0,0,0.7)';
-                ctx2.fillRect(labelX - 2, labelY - 7, tw + 4, 14);
-
-                // 畫文字
+                ctx2.fillStyle = 'rgba(0,0,0,0.7)'; ctx2.fillRect(labelX - 2, labelY - 7, tw + 4, 14);
                 ctx2.fillStyle = '#ddd';
-                if(Math.abs(l.lat) === 23.5) ctx2.fillStyle = '#ffd700'; // 回歸線金色
-                if(l.lat === 0) ctx2.fillStyle = '#00ffff'; // 赤道青色
+                if(Math.abs(l.lat) === 23.5) ctx2.fillStyle = '#ffd700'; 
+                if(l.lat === 0) ctx2.fillStyle = '#00ffff'; 
                 ctx2.fillText(l.t, labelX, labelY);
             }
         }
@@ -503,7 +496,6 @@
 
             const latDir = state.lat>=0?'N':'S';
             document.getElementById('txtLat').innerText = Math.abs(state.lat).toFixed(1)+ "°" + latDir;
-            // [修復] 更新滑桿旁的緯度數值顯示
             document.getElementById('txtLatVal').innerText = Math.abs(state.lat).toFixed(1)+ "°";
             
             const h=Math.floor(state.hour), m=Math.floor((state.hour-h)*60);
@@ -517,6 +509,17 @@
             if(Math.abs(state.dec+23.5)<1) sTxt="冬至";
             if(Math.abs(state.dec)<1) sTxt="春秋分";
             document.getElementById('txtSeason').innerText = sTxt;
+
+            // 計算晝長
+            let val = -Math.tan(rad(state.lat)) * Math.tan(rad(state.dec));
+            let dayH = 0;
+            if (val >= 1) dayH = 0; // 極夜
+            else if (val <= -1) dayH = 24; // 極晝
+            else dayH = deg(Math.acos(val)) * 2 / 15;
+
+            let dh = Math.floor(dayH);
+            let dm = Math.floor((dayH - dh) * 60);
+            document.getElementById('txtDayLen').innerText = `晝長 ${dh}h ${dm}m`;
 
             document.querySelectorAll('.btn-lat').forEach(b => b.classList.remove('active'));
             render();
