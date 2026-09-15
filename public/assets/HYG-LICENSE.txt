@@ -1,0 +1,15 @@
+HYG Database v4.1 bright-star subset
+
+Original creator: David Nash / Astronexus
+Original source: https://github.com/astronexus/HYG-Database/blob/main/hyg/CURRENT/hygdata_v41.csv
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+License terms: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+Adaptations in this project: keep 523 stars with apparent magnitude <= 4,
+exclude the Sun, retain J2000 positions and proper motion, add selected
+Traditional Chinese reference names, and convert selected columns to TypeScript.
+
+This adapted star dataset (src/data/bright-stars.ts) is distributed under
+the same CC BY-SA 4.0 license. Credit the original creator and this adaptation,
+link to the license, indicate further changes, and license adapted datasets
+under CC BY-SA 4.0. No endorsement by the original creator is implied.

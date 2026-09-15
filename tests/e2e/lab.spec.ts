@@ -1,0 +1,324 @@
+import { expect, test } from '@playwright/test'
+import { LabPage } from './pages/LabPage'
+
+const scenes = [
+  ['天球', '天球與星空運動'],
+  ['太陽', '太陽視運動與四季'],
+  ['月相', '月相與月球運動'],
+  ['日月食', '日食與月食'],
+  ['潮汐', '日月引潮力與潮汐'],
+  ['克卜勒', '克卜勒與行星運動']
+] as const
+
+test('六個場景可切換，播放、預設與自由調參可操作', async ({ page }) => {
+  test.setTimeout(90_000)
+  const errors: string[] = []
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
+  const lab = new LabPage(page)
+  await lab.open()
+  for (const [label, heading] of scenes) await lab.selectScene(label, heading)
+  await lab.openControls()
+  await page.getByRole('button', { name: '第二定律' }).click()
+  await expect(page).toHaveURL(/scene=kepler.*preset=second-law/)
+  await page.getByLabel('離心率 e').fill('0.35')
+  await expect(page).not.toHaveURL(/preset=/)
+  await expect(page.locator('[data-preset][aria-pressed="true"]')).toHaveCount(0)
+  await lab.closeControls()
+  await page.getByRole('button', { name: '播放' }).click()
+  await expect(page.getByRole('button', { name: '暫停' })).toBeVisible()
+  await page.getByRole('button', { name: '暫停' }).click()
+  expect(errors).toEqual([])
+})
+
+test('分享網址會還原場景、模式、預設與位置', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open('?scene=sun-path&mode=real&preset=equinox&lat=23.5000&lon=121.0000')
+  await expect(page.getByRole('heading', { name: '太陽視運動與四季' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '真實' })).toHaveAttribute('aria-pressed', 'true')
+  await lab.openControls()
+  await expect(page.getByLabel('緯度')).toHaveValue('23.5')
+  await expect(page.getByLabel('經度')).toHaveValue('121')
+})
+
+test('定位拒絕時保留手動操作', async ({ page, context }) => {
+  await context.clearPermissions()
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'geolocation', { value: {
+      getCurrentPosition(_success: PositionCallback, failure: PositionErrorCallback) {
+        document.documentElement.dataset.locationRequested = 'true'
+        failure({ code: 1, message: 'Permission denied', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 })
+      }
+    } })
+  })
+  const lab = new LabPage(page)
+  await lab.open('?scene=celestial-sphere&mode=real')
+  await lab.openControls()
+  await expect(page.locator('html')).not.toHaveAttribute('data-location-requested', 'true')
+  await page.getByRole('button', { name: '使用裝置位置' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-location-requested', 'true')
+  await expect(page.locator('#location-status')).toContainText(/未取得定位權限|不支援定位/)
+  await expect(page.getByLabel('緯度')).toBeEnabled()
+})
+
+test('鍵盤與觸控控制有可辨識名稱', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open()
+  await page.keyboard.press('Space')
+  await expect(page.getByRole('button', { name: '暫停' })).toBeVisible()
+  await page.keyboard.press('Space')
+  await expect(page.getByRole('button', { name: '播放' })).toBeVisible()
+  await expect(page.locator('canvas')).toHaveAttribute('aria-label', /3D 天體模型/)
+})
+
+test('WebGL 2 不可用時顯示清楚提示', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext
+    const mock = function (this: HTMLCanvasElement, type: string, ...args: unknown[]): unknown {
+      if (type === 'webgl2') return null
+      return Reflect.apply(original, this, [type, ...args])
+    }
+    HTMLCanvasElement.prototype.getContext = mock as typeof HTMLCanvasElement.prototype.getContext
+  })
+  await page.goto('/')
+  await expect(page.getByRole('alert')).toContainText('無法啟用 WebGL 2')
+})
+
+test('WebGL 初始化拋出錯誤時仍顯示裝置提示', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext
+    const mock = function (this: HTMLCanvasElement, type: string, ...args: unknown[]): unknown {
+      if (type === 'webgl2') throw new Error('Graphics driver initialization failed')
+      return Reflect.apply(original, this, [type, ...args])
+    }
+    HTMLCanvasElement.prototype.getContext = mock as typeof HTMLCanvasElement.prototype.getContext
+  })
+  await page.goto('/')
+  await expect(page.getByRole('alert')).toContainText('無法啟用 WebGL 2')
+  await expect(page.getByRole('navigation', { name: '教學場景' })).toBeVisible()
+})
+
+test('全螢幕按鈕會呼叫瀏覽器全螢幕介面', async ({ page }) => {
+  await page.addInitScript(() => {
+    Element.prototype.requestFullscreen = function (): Promise<void> {
+      document.documentElement.dataset.fullscreenRequested = 'true'
+      return Promise.resolve()
+    }
+  })
+  const lab = new LabPage(page)
+  await lab.open()
+  await page.getByRole('button', { name: '切換全螢幕' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-fullscreen-requested', 'true')
+})
+
+test('旋轉螢幕後控制面板、數據與時間操作仍可使用', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open('?scene=eclipses&mode=teaching&preset=total-solar')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await lab.openControls()
+  await expect(page.locator('#detail-metrics')).not.toBeEmpty()
+  await page.locator('#drawer-speed').selectOption('4')
+  await lab.action('向前一步')
+  await expect(page.locator('#timeline')).not.toHaveValue('0')
+  await lab.closeControls()
+  await page.setViewportSize({ width: 844, height: 390 })
+  await lab.openControls()
+  await page.getByRole('slider', { name: /傾角/ }).fill('7')
+  await expect(page.locator('#parameter-inclination')).toHaveValue('7')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false)
+})
+
+test('每個場景的所有預設、相機與圖層都可操作', async ({ page }) => {
+  test.setTimeout(120_000)
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  const lab = new LabPage(page)
+  await lab.open()
+  for (const [label, heading] of scenes) {
+    await lab.closeControls()
+    await lab.selectScene(label, heading)
+    await lab.openControls()
+    const presets = await page.locator('[data-preset]').evaluateAll((buttons) => buttons.map((button) => (button as HTMLElement).dataset.preset!))
+    for (const id of presets) {
+      await page.locator(`[data-preset="${id}"]`).click()
+      await expect(page.locator(`[data-preset="${id}"]`)).toHaveAttribute('aria-pressed', 'true')
+      await expect.poll(() => new URL(page.url()).searchParams.get('preset')).toBe(id)
+    }
+    for (const control of await page.locator('[data-parameter]').all()) {
+      const key = await control.getAttribute('data-parameter')
+      if (await control.evaluate((element) => element.tagName === 'SELECT')) {
+        const options = await control.locator('option').evaluateAll((elements) => elements.map((element) => (element as HTMLOptionElement).value))
+        await control.selectOption(options.at(-1)!)
+      } else {
+        const minimum = Number(await control.getAttribute('min'))
+        const step = Number(await control.getAttribute('step'))
+        await control.fill(String(Number((minimum + step * 2).toFixed(5))))
+      }
+      await expect.poll(() => new URL(page.url()).searchParams.get('preset')).toBeNull()
+      await expect.poll(() => {
+        const value = new URL(page.url()).searchParams.get(`p.${key}`)
+        return value === null ? NaN : Number(value)
+      }).toBeCloseTo(Number(await control.inputValue()), 5)
+    }
+    for (const layer of ['labels', 'paths', 'shadows']) {
+      const toggle = page.locator(`[data-layer="${layer}"]`)
+      await toggle.click()
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+      await toggle.click()
+      await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    }
+    await lab.closeControls()
+    const cameras = await page.locator('[data-camera]').evaluateAll((buttons) => buttons.map((button) => (button as HTMLElement).dataset.camera!))
+    for (const camera of cameras) {
+      await page.locator(`[data-camera="${camera}"]`).click()
+      await expect(page.locator(`[data-camera="${camera}"]`)).toHaveAttribute('aria-pressed', 'true')
+    }
+    await expect(page.locator('#metrics .metric').first()).toBeVisible()
+  }
+  expect(errors).toEqual([])
+})
+
+test('六個場景使用固定日期真實模式並保持觀測數據', async ({ page }) => {
+  test.setTimeout(90_000)
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  const lab = new LabPage(page)
+  await lab.open('?scene=celestial-sphere&mode=real&time=2025-06-21T04%3A00%3A00.000Z&lat=25.033&lon=121.5654')
+  for (const [label, heading] of scenes) {
+    await lab.selectScene(label, heading)
+    await expect(page.getByRole('button', { name: '真實', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('#scale-badge')).toContainText('真實')
+    await lab.openControls()
+    await expect(page.getByLabel('日期與時間')).toHaveValue('2025-06-21T12:00')
+    await expect(page.locator('#detail-metrics')).not.toBeEmpty()
+    for (const control of await page.locator('select[data-parameter]').all()) {
+      const options = await control.locator('option').evaluateAll((elements) => elements.map((element) => (element as HTMLOptionElement).value))
+      await control.selectOption(options.at(-1)!)
+      const key = await control.getAttribute('data-parameter')
+      await expect.poll(() => new URL(page.url()).searchParams.get(`p.${key}`)).toBe(await control.inputValue())
+      await expect(page.getByRole('button', { name: '真實', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    }
+    await lab.closeControls()
+  }
+  expect(errors).toEqual([])
+})
+
+test('複製的連結還原自由參數、時間軸、相機與圖層', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: {
+      writeText: async (text: string) => { document.documentElement.dataset.copiedLink = text }
+    } })
+  })
+  const lab = new LabPage(page)
+  await lab.open('?scene=kepler&mode=teaching&preset=second-law')
+  await lab.openControls()
+  await page.getByLabel('離心率 e').fill('0.35')
+  await page.getByLabel('半長軸 a').fill('2.5')
+  await page.locator('[data-layer="paths"]').click()
+  await lab.closeControls()
+  await page.locator('[data-camera="side"]').click()
+  await page.getByRole('slider', { name: '時間軸', exact: true }).fill('0.625')
+  const share = page.getByRole('button', { name: '複製分享連結', exact: true })
+  if (await share.isVisible()) await share.click()
+  else {
+    await lab.openControls()
+    await page.getByRole('button', { name: '複製目前場景連結', exact: true }).click()
+  }
+  await expect(page.locator('html')).toHaveAttribute('data-copied-link', /^http/)
+  const copied = await page.locator('html').getAttribute('data-copied-link')
+  await page.goto(copied!)
+  await expect(page.locator('#timeline')).toHaveValue('0.625')
+  await expect(page.locator('[data-camera="side"]')).toHaveAttribute('aria-pressed', 'true')
+  await lab.openControls()
+  await expect(page.getByLabel('離心率 e')).toHaveValue('0.35')
+  await expect(page.getByLabel('半長軸 a')).toHaveValue('2.5')
+  await expect(page.locator('[data-layer="paths"]')).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('重設會還原場景參數並停止播放', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open('?scene=kepler&preset=second-law')
+  await lab.openControls()
+  await page.getByLabel('離心率 e').fill('0.8')
+  await lab.closeControls()
+  await page.getByRole('button', { name: '播放', exact: true }).click()
+  await lab.action('重設場景')
+  await expect(page.getByRole('button', { name: '播放', exact: true })).toBeVisible()
+  await lab.openControls()
+  await expect(page.getByLabel('離心率 e')).toHaveValue('0.45')
+})
+
+test('無效分享參數使用安全預設，不產生空白畫面', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open('?scene=unknown&mode=wrong&preset=missing&lat=NaN&lon=999&t=NaN&p.latitude=999')
+  await expect(page.getByRole('heading', { name: '天球與星空運動' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '教學', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await lab.openControls()
+  await expect(page.getByLabel('觀察緯度')).toHaveValue('25')
+})
+
+test('WebGL context 遺失與恢復有提示且控制可繼續操作', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open()
+  const extension = await page.evaluateHandle(() => document.querySelector<HTMLCanvasElement>('#stage-canvas')?.getContext('webgl2')?.getExtension('WEBGL_lose_context') ?? null)
+  const supportsLoss = await extension.evaluate((value) => value !== null)
+  if (supportsLoss) await extension.evaluate((value) => value!.loseContext())
+  else await page.locator('#stage-canvas').dispatchEvent('webglcontextlost', { cancelable: true })
+  await expect(page.getByRole('alert')).toContainText('已中斷')
+  if (supportsLoss) await extension.evaluate((value) => value!.restoreContext())
+  else await page.locator('#stage-canvas').dispatchEvent('webglcontextrestored')
+  await expect(page.getByRole('alert')).not.toBeVisible()
+  await lab.selectScene('月相', '月相與月球運動')
+  await expect(page.locator('#metrics .metric').first()).toBeVisible()
+  await extension.dispose()
+})
+
+test('真實模式可搜尋下一次所在地日食與月食', async ({ page }) => {
+  test.setTimeout(60_000)
+  const lab = new LabPage(page)
+  await lab.open('?scene=eclipses&mode=real&time=2025-01-01T00%3A00%3A00.000Z&lat=25.033&lon=121.5654')
+  await lab.openControls()
+  const original = await page.getByLabel('日期與時間').inputValue()
+  await page.getByRole('button', { name: '所在地日食', exact: true }).click()
+  await expect(page.locator('#eclipse-status')).toContainText(/可見|不可見/)
+  await expect(page.getByLabel('日期與時間')).not.toHaveValue(original)
+  await page.getByRole('button', { name: '月食', exact: true }).click()
+  await expect(page.locator('#eclipse-status')).toContainText(/可見|不可見/)
+  await expect(page.locator('#eclipse-status')).not.toContainText('無法計算')
+})
+
+test('縮減動態設定保留鍵盤操作與原生控制語意', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const lab = new LabPage(page)
+  await lab.open()
+  const mode = page.getByRole('button', { name: '真實', exact: true })
+  await mode.focus()
+  await page.keyboard.press('Space')
+  await expect(mode).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: '播放', exact: true })).toBeVisible()
+  await lab.openControls()
+  await page.getByLabel('緯度').focus()
+  await page.keyboard.press('ArrowUp')
+  await expect(page.getByLabel('緯度')).toBeFocused()
+  await page.getByRole('button', { name: '資料與使用說明' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+})
+
+test('快速拖動參數不超過瀏覽器網址更新限制', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  const lab = new LabPage(page)
+  await lab.open('?scene=kepler&mode=teaching')
+  await lab.openControls()
+  await page.getByLabel('離心率 e').evaluate((element) => {
+    const slider = element as HTMLInputElement
+    for (let index = 0; index < 240; index += 1) {
+      slider.value = String((index % 80) / 100)
+      slider.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+  })
+  await expect(page.getByLabel('離心率 e')).toHaveValue('0.79')
+  await expect.poll(() => new URL(page.url()).searchParams.get('p.eccentricity')).toBe('0.79')
+  expect(errors).toEqual([])
+})
