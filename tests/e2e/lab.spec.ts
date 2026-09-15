@@ -1,14 +1,19 @@
 import { expect, test, type Page } from '@playwright/test'
 import { LabPage } from './pages/LabPage'
 
-const scenes = [
-  ['天球', '天球與星空運動'],
+const primaryScenes = [
   ['太陽', '太陽視運動與四季'],
   ['月相', '月相與月球運動'],
   ['日月食', '日食與月食'],
+] as const
+
+const developerScenes = [
+  ['天球', '天球與星空運動'],
   ['潮汐', '日月引潮力與潮汐'],
   ['克卜勒', '克卜勒與行星運動']
 ] as const
+
+const scenes = [...primaryScenes, ...developerScenes] as const
 
 async function skipIfWebGLUnavailable(page: Page): Promise<void> {
   const fallback = page.locator('#canvas-message.visible')
@@ -18,13 +23,24 @@ async function skipIfWebGLUnavailable(page: Page): Promise<void> {
   }
 }
 
+async function unlockDeveloper(page: Page): Promise<void> {
+  const tools = page.locator('#developer-tools')
+  if (!(await page.locator('#developer-password').isVisible().catch(() => false))) await tools.locator('summary').click()
+  await page.getByLabel('解鎖密碼').fill('0000')
+  await page.getByRole('button', { name: '解鎖開發者功能', exact: true }).click()
+  await expect(page.locator('#developer-lock-state')).toHaveText('✓')
+}
+
 test('六個場景可切換，播放、預設與自由調參可操作', async ({ page }) => {
   test.setTimeout(90_000)
   const errors: string[] = []
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
   const lab = new LabPage(page)
   await lab.open()
-  for (const [label, heading] of scenes) await lab.selectScene(label, heading)
+  await expect(page.locator('#scene-list .scene-button')).toHaveCount(3)
+  for (const [label, heading] of primaryScenes) await lab.selectScene(label, heading)
+  await unlockDeveloper(page)
+  for (const [label, heading] of developerScenes) await lab.selectScene(label, heading)
   await lab.openControls()
   await page.getByRole('button', { name: '第二定律' }).click()
   await expect(page).toHaveURL(/scene=kepler.*preset=second-law/)
@@ -46,6 +62,21 @@ test('分享網址會還原場景、模式、預設與位置', async ({ page }) 
   await lab.openControls()
   await expect(page.getByLabel('緯度')).toHaveValue('23.5')
   await expect(page.getByLabel('經度')).toHaveValue('121')
+})
+
+test('開發者功能折疊並以四位數密碼解鎖', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open()
+  await expect(page.locator('#scene-list .scene-button')).toHaveCount(3)
+  await expect(page.locator('#developer-password')).toBeHidden()
+  await page.locator('#developer-tools summary').click()
+  await page.getByLabel('解鎖密碼').fill('1234')
+  await page.getByRole('button', { name: '解鎖開發者功能', exact: true }).click()
+  await expect(page.locator('#developer-error')).toContainText('密碼錯誤')
+  await page.getByLabel('解鎖密碼').fill('0000')
+  await page.getByRole('button', { name: '解鎖開發者功能', exact: true }).click()
+  await expect(page.locator('#developer-content .developer-scene-button')).toHaveCount(3)
+  await lab.selectScene('克卜勒', '克卜勒與行星運動')
 })
 
 test('定位拒絕時保留手動操作', async ({ page, context }) => {
@@ -143,6 +174,7 @@ test('每個場景的所有預設、相機與圖層都可操作', async ({ page 
   const lab = new LabPage(page)
   await lab.open()
   await skipIfWebGLUnavailable(page)
+  await unlockDeveloper(page)
   for (const [label, heading] of scenes) {
     await lab.closeControls()
     await lab.selectScene(label, heading)
@@ -194,6 +226,7 @@ test('六個場景使用固定日期真實模式並保持觀測數據', async ({
   const lab = new LabPage(page)
   await lab.open('?scene=celestial-sphere&mode=real&time=2025-06-21T04%3A00%3A00.000Z&lat=25.033&lon=121.5654')
   await skipIfWebGLUnavailable(page)
+  await unlockDeveloper(page)
   for (const [label, heading] of scenes) {
     await lab.selectScene(label, heading)
     await expect(page.getByRole('button', { name: '真實', exact: true })).toHaveAttribute('aria-pressed', 'true')

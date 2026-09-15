@@ -10,12 +10,15 @@ const scenarios = [
   ['kepler', 'second-law', 'angled', 15 / 360]
 ] as const
 
+const developerScenes = new Set(['celestial-sphere', 'tides', 'kepler'])
+
 for (const [scene, preset, camera, timeline] of scenarios) {
   test(`${scene} 固定日期、時間軸、相機的模型與面板`, async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 })
       Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 })
     })
+    if (developerScenes.has(scene)) await page.addInitScript(() => sessionStorage.setItem('hu-gege-celestial-lab:developer-unlocked', 'true'))
     const lab = new LabPage(page)
     await lab.open(`?scene=${scene}&mode=teaching&preset=${preset}&time=2025-06-21T04%3A00%3A00.000Z&t=${timeline}`)
     await page.locator(`[data-camera="${camera}"]`).click()

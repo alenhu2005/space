@@ -2,7 +2,7 @@ import './style.css'
 import { moonPhaseFromAngle } from './core/astro-math'
 import { createInitialState, parseUrlState, simulationReducer, toUrlSearchParams, type SimulationAction } from './core/state'
 import type { SceneId, SimulationState } from './core/types'
-import { SCENE_BY_ID, SCENE_DEFINITIONS } from './scenes/definitions'
+import { SCENE_BY_ID } from './scenes/definitions'
 import { createAstronomyProvider, type EclipseSummary } from './services/astronomy-provider'
 import { createStage } from './rendering/stage'
 import type { CameraPreset, SceneMetric } from './scenes/visuals'
@@ -36,6 +36,10 @@ app.innerHTML = `
       <nav class="scene-nav" aria-label="教學場景">
         <p class="nav-heading">實驗場景</p>
         <div class="scene-list" id="scene-list"></div>
+        <details class="developer-tools" id="developer-tools">
+          <summary><span>開發者功能</span><span class="developer-lock-state" id="developer-lock-state">🔒</span></summary>
+          <div class="developer-content" id="developer-content"></div>
+        </details>
       </nav>
 
       <section class="stage-wrap" id="stage-wrap" aria-label="三維天體模型">
@@ -100,6 +104,11 @@ app.innerHTML = `
 `
 
 const astronomy = createAstronomyProvider()
+const PRIMARY_SCENE_IDS: readonly SceneId[] = ['sun-path', 'moon-phases', 'eclipses']
+const DEVELOPER_SCENE_IDS: readonly SceneId[] = ['celestial-sphere', 'tides', 'kepler']
+const DEVELOPER_UNLOCK_KEY = 'hu-gege-celestial-lab:developer-unlocked'
+let developerUnlocked = readDeveloperUnlock()
+let developerError = ''
 let state = initializeState()
 let cameras: readonly CameraPreset[] = []
 let statusTimer = 0
@@ -107,6 +116,18 @@ let urlTimer = 0
 let lastUrlWrite = -Infinity
 let latestMetrics: readonly SceneMetric[] = []
 let selectedEclipse: { readonly kind: 'solar' | 'lunar'; readonly result: EclipseSummary; readonly observerKey: string } | undefined
+
+function readDeveloperUnlock(): boolean {
+  try {
+    return window.sessionStorage.getItem(DEVELOPER_UNLOCK_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function isDeveloperScene(sceneId: SceneId): boolean {
+  return DEVELOPER_SCENE_IDS.includes(sceneId)
+}
 
 const canvas = document.querySelector<HTMLCanvasElement>('#stage-canvas')!
 const stageWrap = document.querySelector<HTMLElement>('#stage-wrap')!
@@ -136,8 +157,10 @@ function setDrawerOpen(open: boolean): void {
 }
 
 function initializeState(): SimulationState {
-  const parsed = parseUrlState(new URLSearchParams(window.location.search))
-  const definition = SCENE_BY_ID[parsed.sceneId]
+  const parsedState = parseUrlState(new URLSearchParams(window.location.search))
+  const safeSceneId = !developerUnlocked && isDeveloperScene(parsedState.sceneId) ? PRIMARY_SCENE_IDS[0]! : parsedState.sceneId
+  const parsed = safeSceneId === parsedState.sceneId ? parsedState : { ...parsedState, sceneId: safeSceneId, presetId: '' }
+  const definition = SCENE_BY_ID[safeSceneId]
   const cameraIds: Readonly<Record<SceneId, readonly string[]>> = {
     'celestial-sphere': ['inside', 'outside', 'horizon'],
     'sun-path': ['horizon', 'outside', 'top', 'seasons'],
@@ -197,6 +220,13 @@ function dispatch(action: SimulationAction, render = true): void {
 }
 
 function selectScene(sceneId: SceneId): void {
+  if (isDeveloperScene(sceneId) && !developerUnlocked) {
+    const tools = document.querySelector<HTMLDetailsElement>('#developer-tools')
+    if (tools) tools.open = true
+    showTransientStatus('請先在「開發者功能」輸入密碼解鎖。')
+    document.querySelector<HTMLInputElement>('#developer-password')?.focus({ preventScroll: true })
+    return
+  }
   const definition = SCENE_BY_ID[sceneId]
   state = simulationReducer(state, { type: 'set-scene', sceneId })
   selectedEclipse = undefined
@@ -302,10 +332,30 @@ function renderAll(): void {
 }
 
 function renderSceneNav(): void {
-  document.querySelector('#scene-list')!.innerHTML = SCENE_DEFINITIONS.map((definition, index) => `
+  const mainDefinitions = PRIMARY_SCENE_IDS.map((id) => SCENE_BY_ID[id])
+  document.querySelector('#scene-list')!.innerHTML = mainDefinitions.map((definition, index) => `
     <button class="scene-button" data-scene="${definition.id}" aria-current="${definition.id === state.sceneId ? 'page' : 'false'}">
-      <span class="scene-number">0${index + 1}</span><span class="scene-label">${definition.shortLabel}</span>
+      <span class="scene-number">${index + 1}</span><span class="scene-label">${definition.shortLabel}</span>
     </button>`).join('')
+  const tools = document.querySelector<HTMLDetailsElement>('#developer-tools')!
+  const wasOpen = tools.open
+  // Preserve the teacher's choice to keep advanced tools collapsed, even
+  // after unlocking them for a particular demonstration.
+  tools.open = wasOpen
+  document.querySelector('#developer-lock-state')!.textContent = developerUnlocked ? '✓' : '🔒'
+  document.querySelector('#developer-content')!.innerHTML = developerUnlocked
+    ? `<div class="developer-scene-list">${DEVELOPER_SCENE_IDS.map((id, index) => {
+      const definition = SCENE_BY_ID[id]
+      return `<button class="scene-button developer-scene-button" data-scene="${id}" aria-current="${id === state.sceneId ? 'page' : 'false'}">
+        <span class="scene-number">D${index + 1}</span><span class="scene-label">${definition.shortLabel}</span>
+      </button>`
+    }).join('')}</div>`
+    : `<p class="developer-description">進階模型已折疊。輸入密碼後解鎖天球、潮汐與克卜勒場景。</p>
+       <label class="developer-password-label" for="developer-password">解鎖密碼
+         <input class="field-input" id="developer-password" type="password" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" aria-describedby="developer-error" />
+       </label>
+       <button class="developer-unlock" type="button" data-action="unlock-developer">解鎖開發者功能</button>
+       <p class="developer-error" id="developer-error" role="status">${developerError}</p>`
 }
 
 function renderTopbar(): void {
@@ -539,6 +589,21 @@ app.addEventListener('click', (event) => {
     return
   }
   switch (target.dataset.action) {
+    case 'unlock-developer': {
+      const password = document.querySelector<HTMLInputElement>('#developer-password')?.value ?? ''
+      if (password === '0000') {
+        developerUnlocked = true
+        developerError = ''
+        try { window.sessionStorage.setItem(DEVELOPER_UNLOCK_KEY, 'true') } catch { /* private browsing may block storage */ }
+        renderAll()
+        showTransientStatus('開發者功能已解鎖')
+      } else {
+        developerError = '密碼錯誤，請輸入四位數密碼。'
+        const error = document.querySelector('#developer-error')
+        if (error) error.textContent = developerError
+      }
+      break
+    }
     case 'play': dispatch({ type: 'set-playing', playing: !state.playing }); break
     case 'step': stepSimulation(); break
     case 'reset': resetScene(); break
