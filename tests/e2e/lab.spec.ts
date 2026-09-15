@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { LabPage } from './pages/LabPage'
 
 const scenes = [
@@ -9,6 +9,14 @@ const scenes = [
   ['潮汐', '日月引潮力與潮汐'],
   ['克卜勒', '克卜勒與行星運動']
 ] as const
+
+async function skipIfWebGLUnavailable(page: Page): Promise<void> {
+  const fallback = page.locator('#canvas-message.visible')
+  if (await fallback.isVisible().catch(() => false)) {
+    await expect(fallback).toContainText('無法啟用 WebGL 2')
+    test.skip(true, '此瀏覽器 runner 沒有可用的 WebGL 2；fallback 已由專用案例驗證')
+  }
+}
 
 test('六個場景可切換，播放、預設與自由調參可操作', async ({ page }) => {
   test.setTimeout(90_000)
@@ -113,6 +121,7 @@ test('全螢幕按鈕會呼叫瀏覽器全螢幕介面', async ({ page }) => {
 test('旋轉螢幕後控制面板、數據與時間操作仍可使用', async ({ page }) => {
   const lab = new LabPage(page)
   await lab.open('?scene=eclipses&mode=teaching&preset=total-solar')
+  await skipIfWebGLUnavailable(page)
   await page.setViewportSize({ width: 390, height: 844 })
   await lab.openControls()
   await expect(page.locator('#detail-metrics')).not.toBeEmpty()
@@ -133,6 +142,7 @@ test('每個場景的所有預設、相機與圖層都可操作', async ({ page 
   page.on('pageerror', (error) => errors.push(error.message))
   const lab = new LabPage(page)
   await lab.open()
+  await skipIfWebGLUnavailable(page)
   for (const [label, heading] of scenes) {
     await lab.closeControls()
     await lab.selectScene(label, heading)
@@ -183,6 +193,7 @@ test('六個場景使用固定日期真實模式並保持觀測數據', async ({
   page.on('pageerror', (error) => errors.push(error.message))
   const lab = new LabPage(page)
   await lab.open('?scene=celestial-sphere&mode=real&time=2025-06-21T04%3A00%3A00.000Z&lat=25.033&lon=121.5654')
+  await skipIfWebGLUnavailable(page)
   for (const [label, heading] of scenes) {
     await lab.selectScene(label, heading)
     await expect(page.getByRole('button', { name: '真實', exact: true })).toHaveAttribute('aria-pressed', 'true')
@@ -210,6 +221,7 @@ test('複製的連結還原自由參數、時間軸、相機與圖層', async ({
   })
   const lab = new LabPage(page)
   await lab.open('?scene=kepler&mode=teaching&preset=second-law')
+  await skipIfWebGLUnavailable(page)
   await lab.openControls()
   await page.getByLabel('離心率 e').fill('0.35')
   await page.getByLabel('半長軸 a').fill('2.5')
@@ -259,6 +271,7 @@ test('無效分享參數使用安全預設，不產生空白畫面', async ({ pa
 test('WebGL context 遺失與恢復有提示且控制可繼續操作', async ({ page }) => {
   const lab = new LabPage(page)
   await lab.open()
+  await skipIfWebGLUnavailable(page)
   const extension = await page.evaluateHandle(() => document.querySelector<HTMLCanvasElement>('#stage-canvas')?.getContext('webgl2')?.getExtension('WEBGL_lose_context') ?? null)
   const supportsLoss = await extension.evaluate((value) => value !== null)
   if (supportsLoss) await extension.evaluate((value) => value!.loseContext())
