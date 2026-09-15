@@ -32,7 +32,10 @@ function preferredPixelRatio(): number {
 
 export function webGl2Available(canvas: HTMLCanvasElement): boolean {
   try {
-    return canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: true }) !== null
+    // Software WebGL is common in headless Firefox and on low-power devices.
+    // It is still a valid WebGL 2 context; adaptive pixel ratio keeps the
+    // scene usable without rejecting the entire lesson up front.
+    return canvas.getContext('webgl2') !== null
   } catch {
     return false
   }
@@ -47,7 +50,7 @@ export function createStage(
   let renderer: THREE.WebGLRenderer | undefined
   try {
     const context = canvas.getContext('webgl2', {
-      alpha: false, antialias: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: true
+      alpha: false, antialias: true, powerPreference: 'high-performance'
     })
     if (context) renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true })
   } catch {
