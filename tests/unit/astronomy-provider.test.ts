@@ -41,6 +41,13 @@ describe('AstronomyProvider', () => {
     expect(Math.abs(provider.moonEclipticLatitude(new Date('2024-04-08T18:21:00Z')))).toBeLessThan(.5)
   })
 
+  it('finds the nearest real instant for an arbitrary teaching moon phase', () => {
+    const around = new Date('2026-09-16T23:48:00Z')
+    const instant = provider.nearestMoonPhaseInstant(90, around)
+    expect(Math.abs(provider.moonPhaseAngle(instant) - 90)).toBeLessThan(.001)
+    expect(Math.abs(instant.getTime() - around.getTime())).toBeLessThan(16 * 86_400_000)
+  })
+
   it('returns finite heliocentric vectors', () => {
     const vector = provider.heliocentricVector('Earth', new Date('2025-01-01T00:00:00Z'))
     expect(Number.isFinite(vector.x)).toBe(true)

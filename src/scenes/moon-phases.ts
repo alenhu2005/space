@@ -7,8 +7,10 @@ import {
   formatObserverTime,
   formatSolarHour,
   observerTimeZone,
+  teachingEarthRotation,
   teachingObserverDirection,
-  teachingMoonEvents
+  teachingMoonEvents,
+  teachingSolarTime
 } from '../core/moon-observer'
 import { COLORS, ring, createSun, createEarth, createMoon, createArrow } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, sunAlignedVector, type BuildContext, type SceneVisual } from './shared'
@@ -64,12 +66,24 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
   root.add(observerPointer)
   const observerLabel = addLabel(root, '觀測者', new THREE.Vector3(), '#55d9d0', .23)
   const observerScaleLabel = addLabel(root, '觀測者標記放大示意', new THREE.Vector3(), '#55d9d0', .17)
+  const earthAxis = new THREE.Vector3(0, 1, 0)
   const moonCamera = {
     id: 'moon', label: '月球特寫', preserveOrbit: true,
     position: new THREE.Vector3(), target: new THREE.Vector3()
   }
   let realEventKey = ''
   let realEventSchedule = { rise: '', transit: '', set: '' }
+
+  function realEarthOrientation(instant: Date, sunVector: { readonly x: number; readonly y: number }): THREE.Quaternion {
+    const surfaceDirection = (latitude: number, longitude: number) => sunAlignedVector(
+      context.astronomy.observerVector(instant, { latitude, longitude, elevation: 0 }), sunVector
+    ).normalize()
+    const north = surfaceDirection(90, 0)
+    const primeMeridian = surfaceDirection(0, 0)
+    primeMeridian.addScaledVector(north, -primeMeridian.dot(north)).normalize()
+    const east = primeMeridian.clone().cross(north).normalize()
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(primeMeridian, north, east))
+  }
 
   function realEventsFor(state: SimulationState, zone: string): typeof realEventSchedule {
     const key = `${state.instant.slice(0, 13)}-${state.observer.latitude}-${state.observer.longitude}-${zone}`
@@ -98,12 +112,14 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
       moonCamera
     ],
     update(state) {
-      const phaseAngle = state.mode === 'real' ? context.astronomy.moonPhaseAngle(new Date(state.instant)) : state.timeline * 360
+      const instant = new Date(state.instant)
+      const phaseAngle = state.mode === 'real' ? context.astronomy.moonPhaseAngle(instant) : state.timeline * 360
       const inclination = degreesToRadians(state.mode === 'real' ? 5.145 : parameter(state, context.definition, 'inclination'))
       const angle = degreesToRadians(phaseAngle)
       const trueScale = parameter(state, context.definition, 'scaleMode') === 1
       const earthRadius = trueScale ? .08 : .78
-      const physicalMoon = state.mode === 'real' ? context.astronomy.geocentricVector('Moon', new Date(state.instant)) : undefined
+      const physicalMoon = state.mode === 'real' ? context.astronomy.geocentricVector('Moon', instant) : undefined
+      const physicalSun = state.mode === 'real' ? context.astronomy.geocentricVector('Sun', instant) : undefined
       const distanceKm = physicalMoon ? Math.hypot(physicalMoon.x, physicalMoon.y, physicalMoon.z) * 149597870.7 : 384400
       const orbitRadius = trueScale ? earthRadius * distanceKm / 6378.137 : 3
       earth.scale.setScalar(earthRadius / .78)
@@ -112,8 +128,7 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
       orbit.rotation.x = -inclination
       moon.position.set(-Math.cos(angle) * orbitRadius, Math.sin(angle) * Math.sin(inclination) * orbitRadius, Math.sin(angle) * Math.cos(inclination) * orbitRadius)
       if (state.mode === 'real') {
-        const instant = new Date(state.instant)
-        moon.position.copy(sunAlignedVector(physicalMoon!, context.astronomy.geocentricVector('Sun', instant)).normalize().multiplyScalar(orbitRadius))
+        moon.position.copy(sunAlignedVector(physicalMoon!, physicalSun!).normalize().multiplyScalar(orbitRadius))
       }
       moon.lookAt(earth.position)
       moonCamera.position.copy(moon.position).add(new THREE.Vector3(0, .65, 2.2))
@@ -122,14 +137,18 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
       faceMarker.position.copy(moon.position)
       faceMarker.setDirection(earth.position.clone().sub(moon.position).normalize())
       faceMarker.setLength(trueScale ? .18 : .65)
-      earth.rotation.y = state.mode === 'real' ? -context.astronomy.localSiderealDegrees(new Date(state.instant), 0) / 360 * Math.PI * 2 : 0
-      const instant = new Date(state.instant)
-      const solarHour = parameter(state, context.definition, 'observerSolarHour')
       const observerLongitude = parameter(state, context.definition, 'observerLongitude')
+      const solarHour = teachingSolarTime(parameter(state, context.definition, 'observerSolarHour'), state.timeline)
+      const teachingRotation = teachingEarthRotation(observerLongitude, solarHour)
       const teachingDirection = teachingObserverDirection(parameter(state, context.definition, 'observerLatitude'), observerLongitude)
-      const observerDirection = state.mode === 'real'
-        ? sunAlignedVector(context.astronomy.observerVector(instant, state.observer), context.astronomy.geocentricVector('Sun', instant)).normalize()
-        : new THREE.Vector3(teachingDirection.x, teachingDirection.y, teachingDirection.z)
+      const surfaceDirection = state.mode === 'real'
+        ? teachingObserverDirection(state.observer.latitude, state.observer.longitude)
+        : teachingDirection
+      const earthOrientation = state.mode === 'real'
+        ? realEarthOrientation(instant, physicalSun!)
+        : new THREE.Quaternion().setFromAxisAngle(earthAxis, teachingRotation)
+      earth.quaternion.copy(earthOrientation)
+      const observerDirection = new THREE.Vector3(surfaceDirection.x, surfaceDirection.y, surfaceDirection.z).applyQuaternion(earthOrientation).normalize()
       const markerRadius = trueScale ? .0065 : .065
       observerMarker.scale.setScalar(markerRadius / .065)
       observerMarker.position.copy(observerDirection).multiplyScalar(earthRadius + markerRadius * .55)
@@ -155,7 +174,7 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
         riseTime.textContent = formatSolarHour(schedule.rise)
         transitTime.textContent = formatSolarHour(schedule.transit)
         setTime.textContent = formatSolarHour(schedule.set)
-        observerZoneNote.textContent = '固定經緯度示意；月相時間軸不移動觀測者。'
+        observerZoneNote.textContent = '固定經緯度；標記隨地球自轉，時間軸同步推進所在地太陽時。'
       }
       const illumination = state.mode === 'real' ? context.astronomy.moonIlluminationFraction(new Date(state.instant)) : moonPhaseFromAngle(phaseAngle).illumination
       const discPhase = Math.acos(1 - 2 * illumination) * 180 / Math.PI

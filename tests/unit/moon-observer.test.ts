@@ -5,8 +5,10 @@ import {
   formatObserverTime,
   formatSolarHour,
   observerTimeZone,
+  teachingEarthRotation,
   teachingObserverDirection,
-  teachingMoonEvents
+  teachingMoonEvents,
+  teachingSolarTime
 } from '../../src/core/moon-observer'
 
 describe('moon observer helpers', () => {
@@ -24,6 +26,14 @@ describe('moon observer helpers', () => {
     expect(east.y).toBe(0)
     expect(east.z).toBeCloseTo(1, 12)
     expect(teachingObserverDirection(90, 121.5)).toEqual({ x: 0, y: 1, z: 0 })
+  })
+
+  it('advances local solar time while rotating the fixed longitude with Earth', () => {
+    expect(teachingSolarTime(12, 0)).toBe(12)
+    expect(teachingSolarTime(12, .25)).toBeCloseTo(21.18354, 5)
+    expect(teachingSolarTime(12, .5)).toBeCloseTo(6.36708, 5)
+    expect(teachingEarthRotation(121.5, 12)).toBeCloseTo(-58.5 * Math.PI / 180, 12)
+    expect(teachingEarthRotation(121.5, 18)).toBeCloseTo(31.5 * Math.PI / 180, 12)
   })
 
   it('formats explicit civil time zones without guessing from longitude', () => {

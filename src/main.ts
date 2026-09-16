@@ -1,7 +1,7 @@
 import './style.css'
 import { moonPhaseFromAngle } from './core/astro-math'
 import { createInitialState, parseUrlState, simulationReducer, toUrlSearchParams, type SimulationAction } from './core/state'
-import type { SceneId, SimulationState } from './core/types'
+import type { SceneId, SimulationMode, SimulationState } from './core/types'
 import { SCENE_BY_ID } from './scenes/definitions'
 import { createAstronomyProvider, type EclipseSummary } from './services/astronomy-provider'
 import { createStage } from './rendering/stage'
@@ -233,6 +233,27 @@ function dispatch(action: SimulationAction, render = true): void {
   syncUrl()
 }
 
+function setSimulationMode(mode: SimulationMode): void {
+  if (state.mode === mode) return
+  let next = state
+  if (state.sceneId === 'moon-phases') {
+    if (mode === 'teaching') {
+      next = simulationReducer(next, { type: 'set-timeline', timeline: astronomy.moonPhaseAngle(new Date(next.instant)) / 360 })
+    } else {
+      const instant = astronomy.nearestMoonPhaseInstant(next.timeline * 360, new Date(next.instant))
+      const dayFraction = (instant.getUTCHours() * 3600 + instant.getUTCMinutes() * 60 + instant.getUTCSeconds()) / 86_400
+      next = simulationReducer(next, { type: 'set-instant', instant: instant.toISOString() })
+      next = simulationReducer(next, { type: 'set-timeline', timeline: dayFraction })
+    }
+    next = { ...next, presetId: '' }
+  }
+  state = simulationReducer(next, { type: 'set-mode', mode })
+  selectedEclipse = undefined
+  stage.setState(state)
+  renderAll()
+  syncUrl()
+}
+
 function selectScene(sceneId: SceneId): void {
   if (isDeveloperScene(sceneId) && !developerUnlocked) {
     const tools = document.querySelector<HTMLDetailsElement>('#developer-tools')
@@ -299,7 +320,7 @@ function resetScene(): void {
 function advanceSimulation(elapsed: number): void {
   if (!state.playing) return
   if (state.mode === 'real') {
-    const secondsPerSecond = state.sceneId === 'eclipses' ? 60 : state.sceneId === 'kepler' ? 864000 : state.sceneId === 'moon-phases' ? 86400 : 3600
+    const secondsPerSecond = state.sceneId === 'eclipses' ? 60 : state.sceneId === 'kepler' ? 864000 : state.sceneId === 'moon-phases' ? 21600 : 3600
     const next = new Date(new Date(state.instant).getTime() + elapsed * state.speed * secondsPerSecond * 1000)
     state = simulationReducer(state, { type: 'set-instant', instant: next.toISOString() })
     const dayFraction = (next.getUTCHours() * 3600 + next.getUTCMinutes() * 60 + next.getUTCSeconds()) / 86400
@@ -315,7 +336,7 @@ function advanceSimulation(elapsed: number): void {
 
 function stepSimulation(): void {
   if (state.mode === 'real') {
-    const next = new Date(new Date(state.instant).getTime() + (state.sceneId === 'eclipses' ? 60_000 : state.sceneId === 'kepler' || state.sceneId === 'moon-phases' ? 86_400_000 : 3_600_000))
+    const next = new Date(new Date(state.instant).getTime() + (state.sceneId === 'eclipses' ? 60_000 : state.sceneId === 'kepler' ? 86_400_000 : state.sceneId === 'moon-phases' ? 21_600_000 : 3_600_000))
     dispatch({ type: 'set-instant', instant: next.toISOString() })
     return
   }
@@ -385,7 +406,7 @@ function renderCameras(): void {
 function renderControls(): void {
   const definition = SCENE_BY_ID[state.sceneId]
   const presetHtml = definition.presets.map((preset) => `
-    <button class="preset-button" data-preset="${preset.id}" aria-pressed="${preset.id === state.presetId}">
+    <button class="preset-button" data-preset="${preset.id}" aria-pressed="${state.mode === 'teaching' && preset.id === state.presetId}">
       <span class="preset-label">${preset.label}</span><span class="preset-desc">${preset.description}</span>
     </button>`).join('')
   const renderParameter = (slider: (typeof definition.controls)[number]): string => {
@@ -597,7 +618,7 @@ app.addEventListener('click', (event) => {
     return
   }
   if (target.dataset.layer) return dispatch({ type: 'toggle-layer', layer: target.dataset.layer as keyof SimulationState['layers'] })
-  if (target.dataset.mode === 'teaching' || target.dataset.mode === 'real') return dispatch({ type: 'set-mode', mode: target.dataset.mode })
+  if (target.dataset.mode === 'teaching' || target.dataset.mode === 'real') return setSimulationMode(target.dataset.mode)
   if (target.dataset.season) {
     const seasons = astronomy.seasons(new Date(state.instant).getUTCFullYear())
     const instant = seasons[target.dataset.season as keyof typeof seasons]

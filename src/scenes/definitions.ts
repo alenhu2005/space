@@ -59,7 +59,7 @@ const definitions: readonly SceneDefinition[] = [
       { key: 'inclination', label: '月球軌道傾角', min: 0, max: 15, step: .1, unit: '°' },
       { key: 'observerLatitude', label: '觀測者緯度', min: -90, max: 90, step: .1, unit: '°' },
       { key: 'observerLongitude', label: '觀測者經度', min: -180, max: 180, step: .1, unit: '°' },
-      { key: 'observerSolarHour', label: '觀測者目前太陽時', min: 0, max: 23.5, step: .5, unit: ' 時' },
+      { key: 'observerSolarHour', label: '觀測者起始太陽時', min: 0, max: 23.5, step: .5, unit: ' 時' },
       { key: 'observerTimeZone', label: '觀測者民用時區', min: 0, max: OBSERVER_TIME_ZONES.length - 1, step: 1, unit: '', availableInReal: true, onlyInReal: true, options: OBSERVER_TIME_ZONES.map(({ value, label }) => ({ value, label })) },
       { key: 'scaleMode', label: '日地月顯示比例', min: 0, max: 1, step: 1, unit: '', availableInReal: true, options: [{ value: 0, label: '教學比例・放大天體' }, { value: 1, label: '地月尺寸與距離等比例' }] }
     ],

@@ -22,6 +22,7 @@ import {
   SearchHourAngle,
   SearchLocalSolarEclipse,
   SearchLunarEclipse,
+  SearchMoonPhase,
   SearchRiseSet,
   Seasons,
   SiderealTime,
@@ -101,6 +102,7 @@ export interface AstronomyProvider {
   observerVector(instant: Date, observer: ObserverLocation): CartesianVector
   starHorizontalPosition(star: J2000StarPosition, instant: Date, observer: ObserverLocation): HorizontalBodyPosition
   moonPhaseAngle(instant: Date): number
+  nearestMoonPhaseInstant(targetAngle: number, around: Date): Date
   moonIlluminationFraction(instant: Date): number
   moonEclipticLatitude(instant: Date): number
   riseSet(body: 'Sun' | 'Moon', instant: Date, observer: ObserverLocation): { readonly rise: Date | null; readonly transit: Date; readonly set: Date | null }
@@ -284,6 +286,18 @@ export function createAstronomyProvider(): AstronomyProvider {
 
     moonPhaseAngle(instant: Date) {
       return MoonPhase(instant)
+    },
+
+    nearestMoonPhaseInstant(targetAngle: number, around: Date) {
+      const normalized = ((targetAngle % 360) + 360) % 360
+      const candidates = [
+        SearchMoonPhase(normalized, around, -20)?.date,
+        SearchMoonPhase(normalized, around, 20)?.date
+      ].filter((instant): instant is Date => instant !== undefined)
+      if (!candidates.length) throw new RangeError('Unable to find a matching lunar phase near the requested date.')
+      return new Date(candidates.reduce((closest, candidate) =>
+        Math.abs(candidate.getTime() - around.getTime()) < Math.abs(closest.getTime() - around.getTime()) ? candidate : closest
+      ).getTime())
     },
 
     moonIlluminationFraction(instant: Date) {

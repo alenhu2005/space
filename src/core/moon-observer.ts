@@ -1,3 +1,5 @@
+const SYNODIC_MONTH_DAYS = 29.53059
+
 export const OBSERVER_TIME_ZONES = Object.freeze([
   { value: 0, id: 'Asia/Taipei', label: '台北（UTC+8）' },
   { value: 1, id: 'UTC', label: '世界協調時間（UTC）' },
@@ -29,6 +31,21 @@ export function teachingObserverDirection(latitude: number, longitude: number): 
     y: clean(Math.sin(latitudeRadians)),
     z: clean(horizontal * Math.sin(longitudeRadians))
   }
+}
+
+/** Local apparent solar time as the phase timeline advances through one synodic month. */
+export function teachingSolarTime(initialHour: number, timeline: number): number {
+  return modulo(initialHour + timeline * SYNODIC_MONTH_DAYS * 24, 24)
+}
+
+/**
+ * Earth rotation that keeps the selected longitude attached to the surface
+ * while placing it at the requested local solar time. The model Sun is -x.
+ */
+export function teachingEarthRotation(longitude: number, solarHour: number): number {
+  const longitudeRadians = modulo(longitude, 360) * Math.PI / 180
+  const hourAngle = (modulo(solarHour, 24) - 12) * Math.PI / 12
+  return longitudeRadians - Math.PI + hourAngle
 }
 
 export function teachingMoonEvents(phaseAngle: number): { readonly rise: number; readonly transit: number; readonly set: number } {
