@@ -173,6 +173,35 @@ body.pseudo-fullscreen .control-panel { z-index: 40; }
 .scene-inset canvas { width: 100%; height: auto; }
 .scene-inset p { margin: 0; font-size: .7rem; }
 .scene-inset span { color: var(--muted); font-size: .57rem; }
+.sun-split .stage-description { display: none; }
+.sun-views { position: absolute; inset: 78px 12px 80px; z-index: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; pointer-events: none; }
+.sun-views.stacked { grid-template-columns: 1fr; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.sun-view { position: relative; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; }
+.sun-view-heading { position: absolute; inset: 0 0 auto; height: 37px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 11px; background: rgba(7, 18, 24, .8); }
+.sun-view-heading h3 { margin: 0; font-size: .74rem; font-weight: 650; }
+.sun-view-heading span { color: var(--dim); font-size: .59rem; white-space: nowrap; }
+.sun-view-heading .sync-indicator { color: var(--cyan); }
+.sync-indicator::before { content: '●'; margin-right: 5px; font-size: .45rem; }
+.sun-view-surface { position: absolute; inset: 38px 0 35px; pointer-events: auto; touch-action: none; cursor: grab; }
+.sun-view-surface:active { cursor: grabbing; }
+.sun-view-surface:focus-visible { outline: 2px solid var(--cyan); outline-offset: -3px; }
+.sun-view-readout { position: absolute; inset: auto 0 0; min-height: 34px; display: grid; place-items: center; padding: 5px 8px; color: var(--muted); background: rgba(7, 18, 24, .8); font-size: .6rem; text-align: center; }
+.sun-view-cameras { position: absolute; right: 7px; bottom: 42px; display: flex; gap: 4px; pointer-events: auto; }
+.sun-path-legend { position: absolute; top: 46px; left: 9px; display: flex; gap: 9px; font-size: .59rem; }
+.earth-light-legend { position: absolute; top: 46px; left: 9px; display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: .59rem; }
+.earth-light-legend span:first-child { color: var(--amber); }
+.earth-light-legend span:last-child { color: #99abd2; }
+.sun-path-legend[hidden], .shadow-legend[hidden] { display: none; }
+.summer-key { color: var(--red); }
+.equinox-key { color: var(--cyan); }
+.winter-key { color: var(--blue); }
+.sun-split .camera-toolbar { flex-direction: row; flex-wrap: wrap; }
+.scene-inset strong { display: block; color: var(--amber); margin: 3px 0; font-size: .76rem; }
+.shadow-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 6px; font-size: .57rem; color: var(--muted); }
+.shadow-legend i { display: inline-block; width: 7px; height: 7px; margin-right: 3px; border-radius: 50%; background: var(--amber); }
+.shadow-legend .umbra-key { background: #8e83db; }
+.shadow-legend .antumbra-key { background: var(--red); }
+.scene-inset .phenomenon-caption { margin-top: 4px; color: var(--amber); font-size: .63rem; }
 .status-toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 50; padding: 12px 16px; max-width: calc(100% - 24px); border: 1px solid var(--cyan); border-radius: 8px; background: #0d191f; color: var(--ink); font-size: .8rem; opacity: 0; pointer-events: none; }
 .status-toast.visible { opacity: 1; }
 input[type="range"] { min-height: 32px; }
@@ -185,7 +214,7 @@ input[type="range"] { min-height: 32px; }
   .drawer-transport { display: block; }
   .app-shell { grid-template-rows: 54px minmax(0,1fr) 58px; }
   .workspace { grid-template-columns: 1fr; grid-template-rows: 58px minmax(0,1fr); }
-  .scene-nav { border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 8px; overflow-x: auto; overflow-y: hidden; }
+  .scene-nav { display: flex; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 8px; overflow-x: auto; overflow-y: hidden; }
   .nav-heading { display: none; }
   .scene-list { display: flex; width: max-content; gap: 4px; }
   .developer-tools { flex: 0 0 138px; margin: 0 0 0 4px; padding: 0; border-top: 0; }
@@ -207,6 +236,9 @@ input[type="range"] { min-height: 32px; }
   .scale-badge { top: 12px; right: 11px; }
   .metrics { left: 12px; bottom: 12px; max-width: calc(100% - 110px); }
   .camera-toolbar { right: 11px; bottom: 12px; flex-direction: column; }
+  .sun-views { inset: 57px 10px 96px; gap: 8px; }
+  .sun-split .camera-toolbar { left: 12px; right: auto; bottom: 50px; gap: 4px; }
+  .sun-split .metrics { max-width: calc(100% - 24px); }
 }
 @media (max-width: 560px) {
   .scene-inset { width: 110px; top: 54px; right: 10px; }
@@ -220,11 +252,24 @@ input[type="range"] { min-height: 32px; }
   .mode-button { padding: 6px 7px; font-size: .65rem; }
   .scene-button { width: 88px; grid-template-columns: 1fr; text-align: center; }
   .scene-number, .stage-eyebrow { display: none; }
+  .scene-list .scene-number { display: inline; color: var(--cyan); }
+  .scene-list .scene-button { grid-template-columns: 12px 1fr; gap: 3px; }
   .stage-heading { max-width: calc(100% - 110px); }
   .timeline-wrap { grid-template-columns: 1fr; }
   .timeline-readout, .step-button { display: none; }
   .metric:nth-child(n+3) { display: none; }
 }
+@media (max-height: 500px) {
+  .sun-views { inset: 44px 8px 65px; }
+  .sun-view-heading { height: 29px; padding: 0 8px; }
+  .sun-view-heading h3 { font-size: .64rem; }
+  .sun-view-surface { inset: 30px 0 25px; }
+  .sun-view-readout { min-height: 24px; padding: 3px 5px; font-size: .54rem; }
+  .sun-view-cameras { bottom: 29px; }
+  .sun-path-legend, .earth-light-legend { top: 34px; font-size: .53rem; gap: 6px; }
+  .sun-split .camera-toolbar { bottom: 31px; }
+}
+body.pseudo-fullscreen .sun-views { top: 128px; bottom: 143px; }
 @media (pointer: coarse) {
   .icon-button, .mode-button, .ghost-button, .panel-toggle, .camera-button, .layer-toggle, .panel-close { min-height: 44px; }
   .icon-button { min-width: 44px; }

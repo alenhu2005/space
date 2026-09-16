@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { classifySolarShadow, classifyLunarShadow, computeShadowGeometry, shadowRadius, type ShadowGeometry } from '../core/geometry'
-import { degreesToRadians, radiansToDegrees } from '../core/astro-math'
+import { degreesToRadians, radiansToDegrees, moonPhaseFromAngle } from '../core/astro-math'
 import { COLORS, createSun, createEarth, createMoon, createConeBetween, updateConeBetween, lineFromPoints } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, sunAlignedVector, type BuildContext, type SceneVisual } from './shared'
+import { createPhaseDisc } from './moon-disc'
 
 const AU_KM = 149597870.7
 const EARTH_RADIUS = 6378.137
@@ -35,10 +36,12 @@ export function createEclipses(context: BuildContext): SceneVisual {
     shadowGroup.add(mesh)
     return mesh
   }
-  const umbra = makeCone(0x050506, .72)
+  const umbra = makeCone(0x6352a5, .32)
   const antumbra = makeCone(COLORS.red, .2)
-  const penumbra = makeCone(COLORS.muted, .11)
+  const penumbra = makeCone(COLORS.amber, .1)
   addLabel(root, '太陽', new THREE.Vector3(-5.6, 1.2, 0), '#f7b955', .3)
+  addLabel(root, '地球', new THREE.Vector3(1.8, .95, 0), '#55d9d0', .28)
+  const moonLabel = addLabel(root, '月球', new THREE.Vector3(), '#eef7f5', .24)
   const overlay = document.createElement('div')
   overlay.className = 'scene-inset'
   const inset = document.createElement('canvas')
@@ -47,9 +50,22 @@ export function createEclipses(context: BuildContext): SceneVisual {
   inset.setAttribute('aria-label', '日月食影錐截面或選定位置所見的日月圓盤')
   const caption = document.createElement('p')
   const convention = document.createElement('span')
-  overlay.append(inset, caption, convention)
+  const surfaceViewNote = document.createElement('p')
+  surfaceViewNote.className = 'surface-view-note'
+  surfaceViewNote.hidden = true
+  const phenomenonCaption = document.createElement('p')
+  phenomenonCaption.className = 'phenomenon-caption'
+  const legend = document.createElement('div')
+  legend.className = 'shadow-legend'
+  legend.innerHTML = '<span><i class="umbra-key"></i>本影</span><span><i></i>半影</span><span class="antumbra-legend"><i class="antumbra-key"></i>偽本影</span>'
+  overlay.append(inset, caption, convention, surfaceViewNote, phenomenonCaption, legend)
   const draw = inset.getContext('2d')
   let cachedOrbit = ''
+  let lastInsetKey = ''
+  let lunarSurface: { state: Parameters<SceneVisual['update']>[0]; shadow: ShadowGeometry; phaseAngle: number } | undefined
+  const moonDisc = createPhaseDisc(context.moonTextureUrl, () => {
+    if (lunarSurface) drawLunarSurface(lunarSurface.state, lunarSurface.shadow, lunarSurface.phaseAngle)
+  })
   const cameras = [
     { id: 'side', label: '太空影錐', position: new THREE.Vector3(-.8, 4.5, 14), target: new THREE.Vector3(-.8, 0, 0) },
     { id: 'moon', label: '月球附近', position: new THREE.Vector3(.35, .55, 1.25), target: new THREE.Vector3(1.8, 0, 0) },
@@ -58,6 +74,9 @@ export function createEclipses(context: BuildContext): SceneVisual {
 
   function drawSection(shadow: ShadowGeometry, solar: boolean): void {
     if (!draw) return
+    const key = `section-${solar}-${shadow.targetRadiusKm.toFixed(3)}-${shadow.axisOffsetKm.toFixed(3)}-${shadow.penumbraRadiusKm.toFixed(3)}-${shadow.umbraRadiusKm.toFixed(3)}`
+    if (key === lastInsetKey) return
+    lastInsetKey = key
     draw.clearRect(0, 0, 160, 160)
     const scale = 65 / Math.max(shadow.targetRadiusKm, shadow.penumbraRadiusKm + shadow.axisOffsetKm)
     const disk = (x: number, radius: number, color: string) => {
@@ -67,14 +86,17 @@ export function createEclipses(context: BuildContext): SceneVisual {
       draw.fill()
     }
     disk(80, shadow.targetRadiusKm, solar ? '#4284ad' : '#c6c9c4')
-    disk(80 + shadow.axisOffsetKm * scale, shadow.penumbraRadiusKm, '#6d768177')
-    disk(80 + shadow.axisOffsetKm * scale, Math.abs(shadow.umbraRadiusKm), shadow.umbraRadiusKm < 0 ? '#f2766b99' : '#070b0ecc')
+    disk(80 + shadow.axisOffsetKm * scale, shadow.penumbraRadiusKm, '#f7b95544')
+    disk(80 + shadow.axisOffsetKm * scale, Math.abs(shadow.umbraRadiusKm), shadow.umbraRadiusKm < 0 ? '#f2766b99' : '#6352a5bb')
     caption.textContent = solar ? '地球・影錐截面' : '月球・影錐截面'
-    convention.textContent = '截面比例一致・忽略大氣'
+    convention.textContent = '截面等比例・影區以顏色標示'
   }
 
   function drawLocal(state: Parameters<SceneVisual['update']>[0]): void {
     if (!draw) return
+    const key = `local-${state.instant}-${state.observer.latitude}-${state.observer.longitude}`
+    if (key === lastInsetKey) return
+    lastInsetKey = key
     const instant = new Date(state.instant)
     const sunPosition = context.astronomy.horizontalPosition('Sun', instant, state.observer)
     const moonPosition = context.astronomy.horizontalPosition('Moon', instant, state.observer)
@@ -83,6 +105,9 @@ export function createEclipses(context: BuildContext): SceneVisual {
     const deltaAzimuth = ((moonPosition.azimuth - sunPosition.azimuth + 540) % 360 - 180) * Math.cos(degreesToRadians(sunPosition.altitude))
     const deltaAltitude = moonPosition.altitude - sunPosition.altitude
     draw.clearRect(0, 0, 160, 160)
+    caption.textContent = sunPosition.altitude > 0 ? '所在地・太陽所見' : '太陽在地平線下'
+    convention.textContent = '相對角徑・天頂向上'
+    if (sunPosition.altitude <= 0) return
     draw.fillStyle = '#f7b955'
     draw.beginPath()
     draw.arc(80, 80, 40, 0, Math.PI * 2)
@@ -91,13 +116,49 @@ export function createEclipses(context: BuildContext): SceneVisual {
     draw.beginPath()
     draw.arc(80 + deltaAzimuth / sourceRadius * 40, 80 - deltaAltitude / sourceRadius * 40, blockerRadius / sourceRadius * 40, 0, Math.PI * 2)
     draw.fill()
-    caption.textContent = sunPosition.altitude > 0 ? '所在地・太陽所見' : '太陽在地平線下'
-    convention.textContent = '相對角徑・天頂向上'
+  }
+
+  function drawLunarSurface(state: Parameters<SceneVisual['update']>[0], shadow: ShadowGeometry, phaseAngle: number): void {
+    if (!draw) return
+    const instant = new Date(state.instant)
+    const fraction = state.mode === 'real' ? context.astronomy.moonIlluminationFraction(instant) : moonPhaseFromAngle(phaseAngle).illumination
+    const discAngle = radiansToDegrees(Math.acos(1 - 2 * fraction))
+    moonDisc.update(phaseAngle <= 180 ? discAngle : 360 - discAngle, '月球', fraction)
+    const key = `lunar-surface-${state.instant}-${state.observer.latitude}-${state.observer.longitude}-${state.layers.shadows}-${moonDisc.revision}-${shadow.axisOffsetKm.toFixed(3)}-${shadow.umbraRadiusKm.toFixed(3)}-${shadow.penumbraRadiusKm.toFixed(3)}`
+    if (key === lastInsetKey) return
+    lastInsetKey = key
+    draw.clearRect(0, 0, 160, 160)
+    const aboveHorizon = state.mode === 'teaching' || context.astronomy.horizontalPosition('Moon', instant, state.observer).altitude > 0
+    caption.textContent = state.mode === 'teaching' ? '地球夜側・所見月面'
+      : aboveHorizon ? '所在地・所見月面' : '月球在地平線下'
+    convention.textContent = '月面亮暗示意・忽略大氣'
+    if (!aboveHorizon) return
+    draw.save()
+    draw.beginPath()
+    draw.arc(80, 80, 60, 0, Math.PI * 2)
+    draw.clip()
+    const discSize = 60 * 256 / 112
+    draw.drawImage(moonDisc.canvas, 80 - discSize / 2, 80 - discSize / 2, discSize, discSize)
+    const scale = 60 / shadow.targetRadiusKm
+    const shadowDisc = (radius: number, color: string): void => {
+      if (shadow.axialDistanceKm <= 0 || radius <= 0) return
+      draw.fillStyle = color
+      draw.beginPath()
+      draw.arc(80 + shadow.axisOffsetKm * scale, 80, radius * scale, 0, Math.PI * 2)
+      draw.fill()
+    }
+    if (state.layers.shadows) {
+      shadowDisc(shadow.penumbraRadiusKm, '#11182555')
+      shadowDisc(shadow.umbraRadiusKm, '#0b0b1bcc')
+    }
+    draw.restore()
   }
 
   return {
     root, overlay,
     cameras,
+    trackingCameraIds: ['surface', 'moon'],
+    dispose: () => moonDisc.dispose(),
     update(state) {
       const instant = new Date(state.instant)
       const real = state.mode === 'real'
@@ -175,17 +236,32 @@ export function createEclipses(context: BuildContext): SceneVisual {
         descending.position.copy(realNode).multiplyScalar(-distance).add(earth.position).add(new THREE.Vector3(0, .22, 0))
       }
       cameras[1]!.position.copy(moon.position).add(new THREE.Vector3(.55, .55, 1.4))
+      const surfaceDirection = (solar ? sun : moon).position.clone().sub(earth.position).normalize()
+      cameras[2]!.position.copy(earth.position).addScaledVector(surfaceDirection, .7)
+      cameras[2]!.target.copy((solar ? sun : moon).position)
       moon.lookAt(earth.position)
+      moonLabel.position.copy(moon.position).add(new THREE.Vector3(0, .55, 0))
       applyLayers(root, state)
       antumbra.visible = state.layers.shadows && endDistance > shadow.apexDistanceKm
-      shadowGroup.visible = !real || nearAlignment
+      shadowGroup.visible = state.cameraPreset !== 'surface' && (!real || nearAlignment)
       orbit.visible = state.layers.paths && (!real || !nearAlignment)
       ascending.visible = descending.visible = state.layers.labels && (!real || !nearAlignment)
       ascending.userData.modeHidden = descending.userData.modeHidden = real && nearAlignment
       const classification = solar ? classifySolarShadow(shadow) : classifyLunarShadow(shadow)
-      if (real && state.cameraPreset === 'surface' && solar) drawLocal(state)
+      const moonMaterial = moon.material as THREE.MeshStandardMaterial
+      // A subdued, texture-mapped teaching fill keeps the eclipsed lunar disc legible.
+      moonMaterial.emissive.setHex(!solar && classification !== 'miss' ? 0x354057 : 0x000000)
+      moonMaterial.emissiveIntensity = .6
+      surfaceViewNote.hidden = !real || state.cameraPreset !== 'surface'
+      surfaceViewNote.textContent = `${solar ? '日下點' : '月下點'} 3D 示意・非選定所在地`
+      lunarSurface = state.cameraPreset === 'surface' && !solar ? { state, shadow, phaseAngle } : undefined
+      if (lunarSurface) drawLunarSurface(state, shadow, phaseAngle)
+      else if (real && state.cameraPreset === 'surface' && solar) drawLocal(state)
       else drawSection(shadow, solar)
       const phenomenon = classification === 'miss' ? '無食象・未對齊交點' : NAMES[classification] + (solar ? '（全球某處）' : '（地球夜側）')
+      phenomenonCaption.textContent = `${solar ? '日食' : '月食'}：${classification === 'miss' ? '未形成食象' : NAMES[classification]}`
+      legend.hidden = !state.layers.shadows
+      legend.querySelector<HTMLElement>('.antumbra-legend')!.hidden = shadow.umbraRadiusKm >= 0
       return [
         { label: '現象・直線光影', value: phenomenon },
         { label: real ? '實際軌道傾角' : '教學軌道傾角', value: radiansToDegrees(inclination).toFixed(1) + '°' },

@@ -19,6 +19,7 @@ export interface StageController {
   readonly available: boolean
   setScene(definition: SceneDefinition): readonly CameraPreset[]
   setState(state: SimulationState): void
+  focusCamera(id: string): void
   resize(): void
   dispose(): void
 }
@@ -62,6 +63,7 @@ export function createStage(
       available: false,
       setScene: () => [],
       setState: () => undefined,
+      focusCamera: () => undefined,
       resize: () => undefined,
       dispose: () => undefined
     }
@@ -90,6 +92,15 @@ export function createStage(
   controls.minDistance = .25
   controls.maxDistance = 250
   controls.target.set(0, .5, 0)
+  const comparisonScene = new THREE.Scene()
+  comparisonScene.background = new THREE.Color(0x02070b)
+  comparisonScene.add(new THREE.HemisphereLight(0x98c7d4, 0x071013, .06))
+  const comparisonCamera = new THREE.PerspectiveCamera(42, 1, .005, 1500)
+  let comparisonControls: OrbitControls | undefined
+  let primarySurface: HTMLElement = container
+  let comparisonSurface: HTMLElement | undefined
+  let primaryViewport = { x: 0, y: 0, width: container.clientWidth, height: container.clientHeight }
+  let comparisonViewport = { x: 0, y: 0, width: 1, height: 1 }
 
   const hemisphere = new THREE.HemisphereLight(0x98c7d4, 0x071013, .2)
   const keyLight = new THREE.DirectionalLight(0xfff0d1, 2.7)
@@ -114,10 +125,13 @@ export function createStage(
   let updatedState: SimulationState | undefined
   let metrics: readonly SceneMetric[] = []
   let labels: THREE.Sprite[] = []
+  let comparisonLabels: THREE.Sprite[] = []
   let previousCameraScale = 1
-  controls.addEventListener('start', () => { cameraGoal = undefined })
+  let cameraTracking = true
+  controls.addEventListener('start', () => { cameraGoal = undefined; cameraTracking = false })
 
   const selectCamera = (id: string): void => {
+    cameraTracking = true
     if (visual && currentState && updatedState !== currentState) {
       metrics = visual.update(currentState)
       updatedState = currentState
@@ -129,22 +143,31 @@ export function createStage(
     }
   }
 
-  function arrangeLabels(): void {
-    const width = container.clientWidth
-    const height = container.clientHeight
-    camera.updateMatrixWorld()
-    visual?.root.updateMatrixWorld(true)
+  function selectComparisonCamera(id: string): void {
+    const preset = visual?.comparison?.cameras.find((item) => item.id === id) ?? visual?.comparison?.cameras[0]
+    if (!preset || !comparisonControls) return
+    comparisonCamera.position.copy(preset.position)
+    comparisonControls.target.copy(preset.target)
+    comparisonControls.update()
+    visual?.overlay?.querySelector<HTMLElement>('[aria-label="地球公轉與四季"]')?.setAttribute('data-view-camera', preset.id)
+    visual?.overlay?.querySelectorAll<HTMLButtonElement>('[data-sun-camera]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.sunCamera === preset.id)))
+  }
+
+  function arrangeLabels(viewCamera: THREE.PerspectiveCamera, root: THREE.Group | undefined, sprites: readonly THREE.Sprite[], viewport: typeof primaryViewport): void {
+    const { width, height } = viewport
+    viewCamera.updateMatrixWorld()
+    root?.updateMatrixWorld(true)
     const origin = container.getBoundingClientRect()
-    const occupied = Array.from(container.querySelectorAll<HTMLElement>('.stage-heading, .scale-badge, .camera-toolbar, .metrics, .scene-inset')).map((element) => {
+    const occupied = Array.from(container.querySelectorAll<HTMLElement>('.stage-heading, .scale-badge, .camera-toolbar, .metrics, .scene-inset, .sun-view-cameras, .sun-path-legend, .earth-light-legend')).map((element) => {
       const rectangle = element.getBoundingClientRect()
-      return { left: rectangle.left - origin.left, right: rectangle.right - origin.left, top: rectangle.top - origin.top, bottom: rectangle.bottom - origin.top }
+      return { left: rectangle.left - origin.left - viewport.x, right: rectangle.right - origin.left - viewport.x, top: rectangle.top - origin.top - viewport.y, bottom: rectangle.bottom - origin.top - viewport.y }
     })
-    for (const label of labels) {
+    for (const label of sprites) {
       if (!label.visible) continue
-      const position = label.getWorldPosition(new THREE.Vector3()).project(camera)
+      const position = label.getWorldPosition(new THREE.Vector3()).project(viewCamera)
       const scale = label.getWorldScale(new THREE.Vector3())
-      const distance = label.getWorldPosition(new THREE.Vector3()).distanceTo(camera.position)
-      const labelHeight = Math.max(10, height * scale.y * camera.zoom / (2 * Math.max(.01, distance) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))))
+      const distance = label.getWorldPosition(new THREE.Vector3()).distanceTo(viewCamera.position)
+      const labelHeight = Math.max(10, height * scale.y * viewCamera.zoom / (2 * Math.max(.01, distance) * Math.tan(THREE.MathUtils.degToRad(viewCamera.fov / 2))))
       const labelWidth = labelHeight * Math.min(4, Math.max(1.4, String(label.userData.text).length * .5))
       const x = (position.x + 1) * width / 2
       const y = (1 - position.y) * height / 2
@@ -163,7 +186,7 @@ export function createStage(
     const elapsed = Math.min(.1, Math.max(0, (time - lastFrame) / 1000))
     lastFrame = time
     if (document.hidden || contextLost) return
-    for (const label of labels) {
+    for (const label of [...labels, ...comparisonLabels]) {
       if (label.userData.layoutHidden) {
         label.visible = (currentState?.layers.labels ?? true) && !label.userData.modeHidden
         label.userData.layoutHidden = false
@@ -195,13 +218,12 @@ export function createStage(
       if (camera.position.distanceTo(cameraGoal.position) < .015) cameraGoal = undefined
     }
     controls.update()
+    comparisonControls?.update()
     if (visual && currentState) {
       if (updatedState !== currentState) {
         metrics = visual.update(currentState)
         updatedState = currentState
-        labels = []
-        visual.root.traverse((object) => { if (object instanceof THREE.Sprite && object.userData.layer === 'labels') labels.push(object) })
-        labels.sort((a, b) => String(a.userData.text).length - String(b.userData.text).length)
+        if (cameraTracking && visual.trackingCameraIds?.includes(currentState.cameraPreset)) selectCamera(currentState.cameraPreset)
       }
       visual.root.traverse((object) => {
         if (object.userData.billboard) object.quaternion.copy(camera.quaternion)
@@ -215,20 +237,50 @@ export function createStage(
         lastMetrics = time
       }
     }
-    arrangeLabels()
-    activeRenderer.render(scene, camera)
+    activeRenderer.setScissorTest(false)
+    activeRenderer.setViewport(0, 0, container.clientWidth, container.clientHeight)
+    if (visual?.comparison && comparisonSurface) {
+      activeRenderer.clear()
+      activeRenderer.setScissorTest(true)
+      renderViewport(scene, camera, visual.root, labels, primaryViewport)
+      renderViewport(comparisonScene, comparisonCamera, visual.comparison.root, comparisonLabels, comparisonViewport)
+      activeRenderer.setScissorTest(false)
+    } else {
+      arrangeLabels(camera, visual?.root, labels, primaryViewport)
+      activeRenderer.render(scene, camera)
+    }
+  }
+
+  function renderViewport(viewScene: THREE.Scene, viewCamera: THREE.PerspectiveCamera, root: THREE.Group, sprites: readonly THREE.Sprite[], viewport: typeof primaryViewport): void {
+    const bottom = container.clientHeight - viewport.y - viewport.height
+    activeRenderer.setViewport(viewport.x, bottom, viewport.width, viewport.height)
+    activeRenderer.setScissor(viewport.x, bottom, viewport.width, viewport.height)
+    arrangeLabels(viewCamera, root, sprites, viewport)
+    activeRenderer.render(viewScene, viewCamera)
+  }
+
+  function resize(): void {
+    const width = Math.max(1, container.clientWidth)
+    const height = Math.max(1, container.clientHeight)
+    activeRenderer.setSize(width, height, false)
+    visual?.overlay?.classList.toggle('stacked', Boolean(visual.comparison) && width < 650 && height > 430)
+    const origin = container.getBoundingClientRect()
+    const measure = (element: HTMLElement) => {
+      const rectangle = element.getBoundingClientRect()
+      return { x: rectangle.left - origin.left, y: rectangle.top - origin.top, width: Math.max(1, rectangle.width), height: Math.max(1, rectangle.height) }
+    }
+    primaryViewport = measure(primarySurface)
+    if (comparisonSurface) comparisonViewport = measure(comparisonSurface)
+    for (const [viewCamera, viewport] of [[camera, primaryViewport], [comparisonCamera, comparisonViewport]] as const) {
+      viewCamera.aspect = viewport.width / viewport.height
+      viewCamera.zoom = viewCamera === comparisonCamera ? Math.min(1.2, viewCamera.aspect / .9) : Math.min(1, viewCamera.aspect / 1.1)
+      viewCamera.updateProjectionMatrix()
+    }
   }
 
   activeRenderer.setAnimationLoop(animate)
 
-  const resizeObserver = new ResizeObserver(() => {
-    const width = Math.max(1, container.clientWidth)
-    const height = Math.max(1, container.clientHeight)
-    activeRenderer.setSize(width, height, false)
-    camera.aspect = width / height
-    camera.zoom = Math.min(1, camera.aspect / 1.1)
-    camera.updateProjectionMatrix()
-  })
+  const resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(container)
 
   canvas.addEventListener('webglcontextlost', (event) => {
@@ -249,10 +301,22 @@ export function createStage(
       keyLight.intensity = definition.id === 'sun-path' ? .2 : 2.7
       keyLight.castShadow = definition.id === 'eclipses'
       backgroundStars.visible = definition.id !== 'celestial-sphere'
+      controls.disconnect()
+      comparisonControls?.dispose()
+      comparisonControls = undefined
+      resizeObserver.unobserve(primarySurface)
+      if (comparisonSurface) resizeObserver.unobserve(comparisonSurface)
+      primarySurface = container
+      comparisonSurface = undefined
       if (visual) {
         scene.remove(visual.root)
+        visual.dispose?.()
         visual.overlay?.remove()
         disposeObject(visual.root)
+        if (visual.comparison) {
+          comparisonScene.remove(visual.comparison.root)
+          disposeObject(visual.comparison.root)
+        }
       }
       visual = createSceneVisual({
         definition,
@@ -262,12 +326,36 @@ export function createStage(
       })
       scene.add(visual.root)
       if (visual.overlay) container.append(visual.overlay)
+      container.classList.toggle('sun-split', Boolean(visual.comparison))
+      if (visual.comparison && visual.overlay) {
+        primarySurface = visual.overlay.querySelector<HTMLElement>('[data-viewport="primary"]')!
+        comparisonSurface = visual.overlay.querySelector<HTMLElement>('[data-viewport="comparison"]')!
+        comparisonScene.add(visual.comparison.root)
+        comparisonControls = new OrbitControls(comparisonCamera, comparisonSurface)
+        comparisonControls.enableDamping = true
+        comparisonControls.minDistance = 3
+        comparisonControls.maxDistance = 30
+        comparisonControls.enablePan = false
+        visual.overlay.addEventListener('click', (event) => {
+          const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-sun-camera]')
+          if (button) selectComparisonCamera(button.dataset.sunCamera!)
+        })
+        selectComparisonCamera(visual.comparison.cameras[0]!.id)
+        resizeObserver.observe(primarySurface)
+        resizeObserver.observe(comparisonSurface)
+      }
+      controls.connect(visual.comparison ? primarySurface : canvas)
+      resizeObserver.observe(container)
       labels = []
+      comparisonLabels = []
       visual.root.traverse((object) => { if (object instanceof THREE.Sprite && object.userData.layer === 'labels') labels.push(object) })
       labels.sort((a, b) => String(a.userData.text).length - String(b.userData.text).length)
+      visual.comparison?.root.traverse((object) => { if (object instanceof THREE.Sprite && object.userData.layer === 'labels') comparisonLabels.push(object) })
+      comparisonLabels.sort((a, b) => String(a.userData.text).length - String(b.userData.text).length)
       updatedState = undefined
       lastMetricsKey = ''
       selectCamera(currentState?.cameraPreset ?? visual.cameras[0]?.id ?? '')
+      resize()
       return visual.cameras
     },
     setState(state) {
@@ -276,21 +364,22 @@ export function createStage(
       activeRenderer.shadowMap.enabled = state.sceneId === 'eclipses' && state.mode === 'teaching' && state.layers.shadows
       const scale = visual?.cameraScale?.(state) ?? 1
       if (cameraChanged || scale !== previousCameraScale) selectCamera(state.cameraPreset)
+      if (cameraChanged && state.cameraPreset === 'seasons') selectComparisonCamera('angled')
       previousCameraScale = scale
     },
-    resize() {
-      const width = Math.max(1, container.clientWidth)
-      const height = Math.max(1, container.clientHeight)
-      activeRenderer.setSize(width, height, false)
-      camera.aspect = width / height
-      camera.zoom = Math.min(1, camera.aspect / 1.1)
-      camera.updateProjectionMatrix()
+    resize,
+    focusCamera(id) {
+      selectCamera(id)
+      if (id === 'seasons') selectComparisonCamera('angled')
     },
     dispose() {
       activeRenderer.setAnimationLoop(null)
       resizeObserver.disconnect()
       controls.dispose()
+      comparisonControls?.dispose()
+      visual?.dispose?.()
       if (visual) disposeObject(visual.root)
+      if (visual?.comparison) disposeObject(visual.comparison.root)
       visual?.overlay?.remove()
       disposeObject(backgroundStars)
       activeRenderer.dispose()

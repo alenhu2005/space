@@ -337,11 +337,6 @@ function renderSceneNav(): void {
     <button class="scene-button" data-scene="${definition.id}" aria-current="${definition.id === state.sceneId ? 'page' : 'false'}">
       <span class="scene-number">${index + 1}</span><span class="scene-label">${definition.shortLabel}</span>
     </button>`).join('')
-  const tools = document.querySelector<HTMLDetailsElement>('#developer-tools')!
-  const wasOpen = tools.open
-  // Preserve the teacher's choice to keep advanced tools collapsed, even
-  // after unlocking them for a particular demonstration.
-  tools.open = wasOpen
   document.querySelector('#developer-lock-state')!.textContent = developerUnlocked ? '✓' : '🔒'
   document.querySelector('#developer-content')!.innerHTML = developerUnlocked
     ? `<div class="developer-scene-list">${DEVELOPER_SCENE_IDS.map((id, index) => {
@@ -579,7 +574,11 @@ app.addEventListener('click', (event) => {
   const sceneId = target.dataset.scene as SceneId | undefined
   if (sceneId) return selectScene(sceneId)
   if (target.dataset.preset) return applyPreset(target.dataset.preset)
-  if (target.dataset.camera) return dispatch({ type: 'set-camera', cameraPreset: target.dataset.camera })
+  if (target.dataset.camera) {
+    dispatch({ type: 'set-camera', cameraPreset: target.dataset.camera })
+    stage.focusCamera(target.dataset.camera)
+    return
+  }
   if (target.dataset.layer) return dispatch({ type: 'toggle-layer', layer: target.dataset.layer as keyof SimulationState['layers'] })
   if (target.dataset.mode === 'teaching' || target.dataset.mode === 'real') return dispatch({ type: 'set-mode', mode: target.dataset.mode })
   if (target.dataset.season) {

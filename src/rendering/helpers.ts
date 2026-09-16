@@ -136,6 +136,7 @@ export function createMoon(radius = 0.28, textureUrl?: string): THREE.Mesh {
       texture.colorSpace = THREE.SRGBColorSpace
       texture.anisotropy = 4
       material.map = texture
+      material.emissiveMap = texture
       material.color.set(0xffffff)
       material.needsUpdate = true
     })

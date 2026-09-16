@@ -9,7 +9,11 @@ export class LabPage {
   }
 
   async selectScene(label: string, heading: string): Promise<void> {
-    await this.page.getByRole('navigation', { name: '教學場景' }).getByRole('button', { name: new RegExp(`${label}$`) }).click()
+    const button = this.page.getByRole('navigation', { name: '教學場景' }).getByRole('button', { name: new RegExp(`${label}$`) })
+    if (['天球', '潮汐', '克卜勒'].includes(label) && !(await button.isVisible())) {
+      await this.page.locator('#developer-tools summary').click()
+    }
+    await button.click()
     await expect(this.page.getByRole('heading', { name: heading })).toBeVisible()
   }
 

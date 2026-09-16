@@ -6,6 +6,7 @@ const scenarios = [
   ['sun-path', 'june-solstice', 'horizon', 0.5],
   ['moon-phases', 'first-quarter', 'angled', 0.25],
   ['eclipses', 'total-solar', 'side', 0],
+  ['eclipses', 'total-lunar', 'surface', 0.5],
   ['tides', 'spring-new', 'top', 0],
   ['kepler', 'second-law', 'angled', 15 / 360]
 ] as const
@@ -13,7 +14,8 @@ const scenarios = [
 const developerScenes = new Set(['celestial-sphere', 'tides', 'kepler'])
 
 for (const [scene, preset, camera, timeline] of scenarios) {
-  test(`${scene} 固定日期、時間軸、相機的模型與面板`, async ({ page }) => {
+  const snapshotName = camera === 'surface' ? `${scene}-lunar-surface` : scene
+  test(`${snapshotName} 固定日期、時間軸、相機的模型與面板`, async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 })
       Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 })
@@ -34,10 +36,10 @@ for (const [scene, preset, camera, timeline] of scenarios) {
     }
     await page.evaluate(() => document.fonts.ready)
     expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false)
-    await expect(page).toHaveScreenshot(`${scene}-model.png`, { animations: 'disabled', maxDiffPixelRatio: .025 })
+    await expect(page).toHaveScreenshot(`${snapshotName}-model.png`, { animations: 'disabled', maxDiffPixelRatio: .025 })
     await lab.openControls()
     await expect(page.locator('#detail-metrics')).not.toBeEmpty()
     await expect(page.getByText('教學提示與課綱對應', { exact: true })).toBeVisible()
-    await expect(page).toHaveScreenshot(`${scene}-controls.png`, { animations: 'disabled', maxDiffPixelRatio: .025 })
+    await expect(page).toHaveScreenshot(`${snapshotName}-controls.png`, { animations: 'disabled', maxDiffPixelRatio: .025 })
   })
 }

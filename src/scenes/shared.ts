@@ -20,6 +20,12 @@ export interface SceneVisual {
   readonly root: THREE.Group
   readonly cameras: readonly CameraPreset[]
   readonly overlay?: HTMLElement
+  readonly comparison?: {
+    readonly root: THREE.Group
+    readonly cameras: readonly CameraPreset[]
+  }
+  readonly trackingCameraIds?: readonly string[]
+  dispose?(): void
   cameraScale?(state: SimulationState): number
   update(state: SimulationState): readonly SceneMetric[]
 }
