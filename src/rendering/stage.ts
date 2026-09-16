@@ -87,6 +87,7 @@ export function createStage(
   const camera = new THREE.PerspectiveCamera(42, 1, .005, 1500)
   camera.position.set(8, 5.8, 8)
   const controls = new OrbitControls(camera, canvas)
+  controls.zoomToCursor = true
   controls.enableDamping = true
   controls.dampingFactor = .075
   controls.minDistance = .25
@@ -97,6 +98,8 @@ export function createStage(
   comparisonScene.add(new THREE.HemisphereLight(0x98c7d4, 0x071013, .06))
   const comparisonCamera = new THREE.PerspectiveCamera(42, 1, .005, 1500)
   let comparisonControls: OrbitControls | undefined
+  let comparisonCameraId = 'angled'
+  let comparisonTrackedTarget: THREE.Vector3 | undefined
   let primarySurface: HTMLElement = container
   let comparisonSurface: HTMLElement | undefined
   let primaryViewport = { x: 0, y: 0, width: container.clientWidth, height: container.clientHeight }
@@ -128,7 +131,16 @@ export function createStage(
   let comparisonLabels: THREE.Sprite[] = []
   let previousCameraScale = 1
   let cameraTracking = true
-  controls.addEventListener('start', () => { cameraGoal = undefined; cameraTracking = false })
+  let trackedCameraTarget: THREE.Vector3 | undefined
+  controls.addEventListener('start', () => {
+    if (cameraGoal) {
+      camera.position.copy(cameraGoal.position)
+      controls.target.copy(cameraGoal.target)
+      controls.update()
+    }
+    cameraGoal = undefined
+    cameraTracking = Boolean(visual?.cameras.find((preset) => preset.id === currentState?.cameraPreset)?.preserveOrbit)
+  })
 
   const selectCamera = (id: string): void => {
     cameraTracking = true
@@ -138,6 +150,7 @@ export function createStage(
     }
     const preset = visual?.cameras.find((item) => item.id === id) ?? visual?.cameras[0]
     if (preset) {
+      trackedCameraTarget = preset.target.clone()
       const scale = currentState ? visual?.cameraScale?.(currentState) ?? 1 : 1
       cameraGoal = { ...preset, position: preset.position.clone().sub(preset.target).multiplyScalar(scale).add(preset.target), target: preset.target.clone() }
     }
@@ -146,6 +159,8 @@ export function createStage(
   function selectComparisonCamera(id: string): void {
     const preset = visual?.comparison?.cameras.find((item) => item.id === id) ?? visual?.comparison?.cameras[0]
     if (!preset || !comparisonControls) return
+    comparisonCameraId = preset.id
+    comparisonTrackedTarget = preset.target.clone()
     comparisonCamera.position.copy(preset.position)
     comparisonControls.target.copy(preset.target)
     comparisonControls.update()
@@ -223,7 +238,25 @@ export function createStage(
       if (updatedState !== currentState) {
         metrics = visual.update(currentState)
         updatedState = currentState
-        if (cameraTracking && visual.trackingCameraIds?.includes(currentState.cameraPreset)) selectCamera(currentState.cameraPreset)
+        const cameraPreset = currentState.cameraPreset
+        if (cameraTracking && visual.trackingCameraIds?.includes(cameraPreset)) {
+          const preset = visual.cameras.find((item) => item.id === cameraPreset)!
+          if (preset.preserveOrbit && trackedCameraTarget) {
+            const delta = preset.target.clone().sub(trackedCameraTarget)
+            camera.position.add(delta)
+            controls.target.add(delta)
+            cameraGoal?.position.add(delta)
+            cameraGoal?.target.add(delta)
+            trackedCameraTarget.copy(preset.target)
+          } else selectCamera(cameraPreset)
+        }
+        if (visual.comparison?.trackingCameraIds?.includes(comparisonCameraId) && comparisonControls && comparisonTrackedTarget) {
+          const preset = visual.comparison.cameras.find((item) => item.id === comparisonCameraId)!
+          const delta = preset.target.clone().sub(comparisonTrackedTarget)
+          comparisonCamera.position.add(delta)
+          comparisonControls.target.add(delta)
+          comparisonTrackedTarget.copy(preset.target)
+        }
       }
       visual.root.traverse((object) => {
         if (object.userData.billboard) object.quaternion.copy(camera.quaternion)
@@ -300,6 +333,7 @@ export function createStage(
       hemisphere.intensity = definition.id === 'celestial-sphere' ? 1.2 : definition.id === 'kepler' ? .7 : definition.id === 'sun-path' ? .35 : .2
       keyLight.intensity = definition.id === 'sun-path' ? .2 : 2.7
       keyLight.castShadow = definition.id === 'eclipses'
+      controls.minDistance = ['sun-path', 'moon-phases', 'eclipses'].includes(definition.id) ? .9 : .25
       backgroundStars.visible = definition.id !== 'celestial-sphere'
       controls.disconnect()
       comparisonControls?.dispose()
@@ -333,9 +367,9 @@ export function createStage(
         comparisonScene.add(visual.comparison.root)
         comparisonControls = new OrbitControls(comparisonCamera, comparisonSurface)
         comparisonControls.enableDamping = true
-        comparisonControls.minDistance = 3
-        comparisonControls.maxDistance = 30
-        comparisonControls.enablePan = false
+        comparisonControls.zoomToCursor = true
+        comparisonControls.minDistance = .75
+        comparisonControls.maxDistance = 60
         visual.overlay.addEventListener('click', (event) => {
           const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-sun-camera]')
           if (button) selectComparisonCamera(button.dataset.sunCamera!)

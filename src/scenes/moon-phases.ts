@@ -1,5 +1,14 @@
 import * as THREE from 'three'
 import { degreesToRadians, moonPhaseFromAngle } from '../core/astro-math'
+import {
+  formatObserverCoordinates,
+  formatObserverTime,
+  formatSolarHour,
+  formatTeachingObserverLocation,
+  observerTimeZone,
+  teachingObserverDirection,
+  teachingSolarTime
+} from '../core/moon-observer'
 import { COLORS, ring, createSun, createEarth, createMoon, createArrow } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, riseSetMetrics, sunAlignedVector, type BuildContext, type SceneVisual } from './shared'
 import { createPhaseDisc } from './moon-disc'
@@ -24,19 +33,43 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
   root.add(sunlight)
   addLabel(root, '太陽光', new THREE.Vector3(-4.25, 1.5, 0), '#f7b955', .28)
   const phaseDisc = createPhaseDisc(context.moonTextureUrl)
+  const observerLocation = document.createElement('span')
+  observerLocation.className = 'observer-location'
+  const observerTime = document.createElement('span')
+  observerTime.className = 'observer-time'
+  const observerZoneNote = document.createElement('span')
+  observerZoneNote.className = 'observer-zone-note'
+  phaseDisc.element.append(observerLocation, observerTime, observerZoneNote)
   const faceMarker = createArrow(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(), .65, COLORS.cyan)
   faceMarker.userData.layer = 'paths'
   root.add(faceMarker)
+  const observerMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(.065, 16, 12),
+    new THREE.MeshBasicMaterial({ color: COLORS.cyan })
+  )
+  observerMarker.userData.layer = 'labels'
+  root.add(observerMarker)
+  const observerPointer = createArrow(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), .22, COLORS.cyan)
+  observerPointer.userData.layer = 'labels'
+  root.add(observerPointer)
+  const observerLabel = addLabel(root, '觀測者', new THREE.Vector3(), '#55d9d0', .23)
+  const observerScaleLabel = addLabel(root, '觀測者標記放大示意', new THREE.Vector3(), '#55d9d0', .17)
+  const moonCamera = {
+    id: 'moon', label: '月球特寫', preserveOrbit: true,
+    position: new THREE.Vector3(), target: new THREE.Vector3()
+  }
 
   return {
     root,
     overlay: phaseDisc.element,
     dispose: () => phaseDisc.dispose(),
+    trackingCameraIds: ['moon'],
     cameraScale: (state) => parameter(state, context.definition, 'scaleMode') === 1 ? 1.55 : 1,
     cameras: [
       { id: 'top', label: '太空俯視', position: new THREE.Vector3(-1.65, 13.5, .01), target: new THREE.Vector3(-1.65, 0, 0) },
       { id: 'angled', label: '斜視', position: new THREE.Vector3(7.8, 7, 9.5), target: new THREE.Vector3(-1.4, .4, 0) },
-      { id: 'earth', label: '地球旁', position: new THREE.Vector3(1.4, 1.2, 5.5), target: new THREE.Vector3(0, 0, 0) }
+      { id: 'earth', label: '地球旁', position: new THREE.Vector3(1.4, 1.2, 5.5), target: new THREE.Vector3(0, 0, 0) },
+      moonCamera
     ],
     update(state) {
       const phaseAngle = state.mode === 'real' ? context.astronomy.moonPhaseAngle(new Date(state.instant)) : state.timeline * 360
@@ -57,16 +90,44 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
         moon.position.copy(sunAlignedVector(physicalMoon!, context.astronomy.geocentricVector('Sun', instant)).normalize().multiplyScalar(orbitRadius))
       }
       moon.lookAt(earth.position)
+      moonCamera.position.copy(moon.position).add(new THREE.Vector3(0, .65, 2.2))
+      moonCamera.target.copy(moon.position)
       moonLabel.position.copy(moon.position).add(new THREE.Vector3(0, trueScale ? .22 : .55, 0))
       faceMarker.position.copy(moon.position)
       faceMarker.setDirection(earth.position.clone().sub(moon.position).normalize())
       faceMarker.setLength(trueScale ? .18 : .65)
       earth.rotation.y = -(state.mode === 'real' ? context.astronomy.localSiderealDegrees(new Date(state.instant), 0) / 360 : state.timeline * 29.53059) * Math.PI * 2
+      const instant = new Date(state.instant)
+      const solarHour = teachingSolarTime(parameter(state, context.definition, 'observerSolarHour'), state.timeline)
+      const teachingDirection = teachingObserverDirection(parameter(state, context.definition, 'observerLatitude'), solarHour)
+      const observerDirection = state.mode === 'real'
+        ? sunAlignedVector(context.astronomy.observerVector(instant, state.observer), context.astronomy.geocentricVector('Sun', instant)).normalize()
+        : new THREE.Vector3(teachingDirection.x, teachingDirection.y, teachingDirection.z)
+      const markerRadius = trueScale ? .0065 : .065
+      observerMarker.scale.setScalar(markerRadius / .065)
+      observerMarker.position.copy(observerDirection).multiplyScalar(earthRadius + markerRadius * .55)
+      observerPointer.position.copy(observerDirection).multiplyScalar(earthRadius + markerRadius)
+      observerPointer.setDirection(observerDirection)
+      observerPointer.setLength(trueScale ? .045 : .22, trueScale ? .018 : .07, trueScale ? .009 : .035)
+      observerLabel.position.copy(observerDirection).multiplyScalar(earthRadius + (trueScale ? .13 : .35))
+      observerScaleLabel.position.copy(observerDirection).multiplyScalar(earthRadius + .24)
+      if (state.mode === 'real') {
+        const zone = observerTimeZone(parameter(state, context.definition, 'observerTimeZone'))
+        observerLocation.textContent = `觀測者 ${formatObserverCoordinates(state.observer.latitude, state.observer.longitude)}`
+        observerTime.textContent = `${formatObserverTime(instant, zone)}（${zone}）`
+        observerZoneNote.textContent = '時區需自行選擇；不依經度推測民用時區。'
+      } else {
+        const latitude = parameter(state, context.definition, 'observerLatitude')
+        observerLocation.textContent = `觀測者 ${formatTeachingObserverLocation(latitude, solarHour)}`
+        observerTime.textContent = `教學太陽時 ${formatSolarHour(solarHour)}`
+        observerZoneNote.textContent = '時間隨 29.53059 日朔望週期同步。'
+      }
       const illumination = state.mode === 'real' ? context.astronomy.moonIlluminationFraction(new Date(state.instant)) : moonPhaseFromAngle(phaseAngle).illumination
       const discPhase = Math.acos(1 - 2 * illumination) * 180 / Math.PI
       const phase = moonPhaseFromAngle(phaseAngle)
       phaseDisc.update(phaseAngle <= 180 ? discPhase : 360 - discPhase, phase.name, illumination)
       applyLayers(root, state)
+      observerScaleLabel.visible = trueScale && state.layers.labels
       const riseMinutes = Math.round(((6 + phaseAngle / 15) % 24) * 60) % 1440
       const riseLabel = `${String(Math.floor(riseMinutes / 60)).padStart(2, '0')}:${String(riseMinutes % 60).padStart(2, '0')}`
       return [

@@ -1,4 +1,5 @@
 import type { SceneDefinition, SceneId } from '../core/types'
+import { OBSERVER_TIME_ZONES } from '../core/moon-observer'
 
 const definitions: readonly SceneDefinition[] = [
   {
@@ -54,8 +55,14 @@ const definitions: readonly SceneDefinition[] = [
     curriculumCodes: ['Fb-IV-3', 'Fb-IV-4'],
     focus: ['月球永遠有一半被太陽照亮', '月相由日地月相對位置決定', '月球同步自轉讓同一面大致朝向地球'],
     misconception: '月相的暗部不是地球影子；只有月食時月球才會進入地球影子。',
-    controls: [{ key: 'inclination', label: '月球軌道傾角', min: 0, max: 15, step: .1, unit: '°' }, { key: 'scaleMode', label: '日地月顯示比例', min: 0, max: 1, step: 1, unit: '', availableInReal: true, options: [{ value: 0, label: '教學比例・放大天體' }, { value: 1, label: '地月尺寸與距離等比例' }] }],
-    defaultParameters: { phase: 45, inclination: 5.145, scaleMode: 0 },
+    controls: [
+      { key: 'inclination', label: '月球軌道傾角', min: 0, max: 15, step: .1, unit: '°' },
+      { key: 'observerLatitude', label: '觀測者緯度', min: -90, max: 90, step: .1, unit: '°' },
+      { key: 'observerSolarHour', label: '觀測者起始太陽時', min: 0, max: 23.5, step: .5, unit: ' 時' },
+      { key: 'observerTimeZone', label: '觀測者民用時區', min: 0, max: OBSERVER_TIME_ZONES.length - 1, step: 1, unit: '', availableInReal: true, onlyInReal: true, options: OBSERVER_TIME_ZONES.map(({ value, label }) => ({ value, label })) },
+      { key: 'scaleMode', label: '日地月顯示比例', min: 0, max: 1, step: 1, unit: '', availableInReal: true, options: [{ value: 0, label: '教學比例・放大天體' }, { value: 1, label: '地月尺寸與距離等比例' }] }
+    ],
+    defaultParameters: { phase: 45, inclination: 5.145, observerLatitude: 25.033, observerSolarHour: 12, observerTimeZone: 0, scaleMode: 0 },
     presets: [
       { id: 'new-moon', label: '新月', description: '月球位於日地之間', parameters: { phase: 0, inclination: 5.145 }, cameraPreset: 'top' },
       { id: 'first-quarter', label: '上弦月', description: '月球在東方相距 90°', parameters: { phase: 90, inclination: 5.145 }, cameraPreset: 'top' },

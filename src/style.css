@@ -69,6 +69,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .workspace { min-height: 0; display: grid; grid-template-columns: 196px minmax(0, 1fr) 300px; }
 .scene-nav, .control-panel { background: rgba(7, 15, 20, .9); }
 .scene-nav { border-right: 1px solid var(--line); padding: 14px 10px; overflow: auto; }
+.nav-header { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 8px; }
+.nav-header .nav-heading { margin-bottom: 0; }
+.nav-toggle { flex: none; font-size: 1.25rem; }
+body.nav-collapsed .workspace { grid-template-columns: 64px minmax(0, 1fr) 300px; }
+body.nav-collapsed .scene-nav { padding: 10px 5px; }
+body.nav-collapsed .nav-header { justify-content: center; }
+body.nav-collapsed .nav-heading, body.nav-collapsed .scene-label, body.nav-collapsed .developer-tools { display: none; }
+body.nav-collapsed .scene-button { grid-template-columns: 1fr; padding: 8px; text-align: center; }
+body.nav-collapsed .scene-number { display: block; font-size: .85rem; }
 .nav-heading, .section-kicker { margin: 0 8px 9px; color: var(--dim); font-size: .62rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .scene-list { display: grid; gap: 4px; }
 .developer-tools { margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line); }
@@ -102,6 +111,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .scale-badge { position: absolute; top: 17px; right: 16px; z-index: 5; padding: 6px 8px; border: 1px solid rgba(247,185,85,.36); border-radius: 6px; color: var(--amber); background: rgba(24, 16, 5, .72); font: 650 .61rem ui-monospace, monospace; letter-spacing: .06em; backdrop-filter: blur(10px); }
 .camera-toolbar { position: absolute; right: 16px; bottom: 16px; z-index: 5; display: flex; gap: 5px; }
 .camera-button { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: rgba(5, 13, 18, .74); color: var(--muted); font-size: .65rem; cursor: pointer; backdrop-filter: blur(8px); }
+a.camera-button { display: inline-flex; align-items: center; text-decoration: none; }
 .camera-button:hover, .camera-button[aria-pressed="true"] { color: var(--ink); border-color: rgba(85,217,208,.45); }
 .metrics { position: absolute; left: 17px; bottom: 15px; z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
 .metric { padding: 5px 7px; background: rgba(4, 11, 15, .7); border: 1px solid var(--line); border-radius: 5px; backdrop-filter: blur(8px); }
@@ -173,6 +183,10 @@ body.pseudo-fullscreen .control-panel { z-index: 40; }
 .scene-inset canvas { width: 100%; height: auto; }
 .scene-inset p { margin: 0; font-size: .7rem; }
 .scene-inset span { color: var(--muted); font-size: .57rem; }
+.scene-inset .observer-location, .scene-inset .observer-time, .scene-inset .observer-zone-note { display: block; margin-top: 5px; line-height: 1.5; overflow-wrap: anywhere; }
+.scene-inset .observer-location { color: var(--cyan); }
+.scene-inset .observer-time { color: var(--ink); font-variant-numeric: tabular-nums; }
+.scene-inset .observer-zone-note { font-size: .53rem; }
 .sun-split .stage-description { display: none; }
 .sun-views { position: absolute; inset: 78px 12px 80px; z-index: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; pointer-events: none; }
 .sun-views.stacked { grid-template-columns: 1fr; grid-template-rows: repeat(2, minmax(0, 1fr)); }
@@ -215,6 +229,12 @@ input[type="range"] { min-height: 32px; }
   .app-shell { grid-template-rows: 54px minmax(0,1fr) 58px; }
   .workspace { grid-template-columns: 1fr; grid-template-rows: 58px minmax(0,1fr); }
   .scene-nav { display: flex; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 8px; overflow-x: auto; overflow-y: hidden; }
+  .nav-header { flex: none; margin: 0 4px 0 0; }
+  body.nav-collapsed .workspace { grid-template-columns: 1fr; grid-template-rows: 44px minmax(0, 1fr); }
+  body.nav-collapsed .scene-list { display: none; }
+  body.nav-collapsed .nav-header .nav-heading { display: block; }
+  body.nav-collapsed .scene-nav { padding: 0 8px; }
+  body.nav-collapsed .nav-header { width: 100%; flex-direction: row-reverse; justify-content: flex-end; }
   .nav-heading { display: none; }
   .scene-list { display: flex; width: max-content; gap: 4px; }
   .developer-tools { flex: 0 0 138px; margin: 0 0 0 4px; padding: 0; border-top: 0; }

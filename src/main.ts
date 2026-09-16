@@ -34,7 +34,7 @@ app.innerHTML = `
 
     <main class="workspace">
       <nav class="scene-nav" aria-label="教學場景">
-        <p class="nav-heading">實驗場景</p>
+        <div class="nav-header"><p class="nav-heading">實驗場景</p><button class="icon-button nav-toggle" data-action="toggle-nav" aria-label="收合實驗場景" aria-expanded="true" aria-controls="scene-list developer-tools" title="收合實驗場景">‹</button></div>
         <div class="scene-list" id="scene-list"></div>
         <details class="developer-tools" id="developer-tools">
           <summary><span>開發者功能</span><span class="developer-lock-state" id="developer-lock-state">🔒</span></summary>
@@ -141,6 +141,20 @@ cameras = stage.setScene(SCENE_BY_ID[state.sceneId])
 stage.setState(state)
 renderAll()
 const drawerMedia = window.matchMedia('(max-width: 900px)')
+function updateSceneNav(): void {
+  const collapsed = document.body.classList.contains('nav-collapsed')
+  const toggle = document.querySelector<HTMLButtonElement>('.nav-toggle')!
+  const label = collapsed ? '展開實驗場景' : '收合實驗場景'
+  toggle.setAttribute('aria-label', label)
+  toggle.setAttribute('aria-expanded', String(!collapsed))
+  toggle.title = label
+  toggle.textContent = collapsed ? '☰' : '‹'
+  document.querySelector<HTMLElement>('#scene-list')!.inert = collapsed && drawerMedia.matches
+  document.querySelector<HTMLElement>('#developer-tools')!.inert = collapsed
+}
+try { document.body.classList.toggle('nav-collapsed', sessionStorage.getItem('hu-gege-celestial-lab:nav-collapsed') === 'true') } catch { /* Storage may be disabled; keep the menu expanded. */ }
+drawerMedia.addEventListener('change', updateSceneNav)
+updateSceneNav()
 function updateDrawerAccessibility(): void {
   const panel = document.querySelector<HTMLElement>('#control-panel')!
   panel.inert = drawerMedia.matches && !document.body.classList.contains('panel-open')
@@ -164,8 +178,8 @@ function initializeState(): SimulationState {
   const cameraIds: Readonly<Record<SceneId, readonly string[]>> = {
     'celestial-sphere': ['inside', 'outside', 'horizon'],
     'sun-path': ['horizon', 'outside', 'top', 'seasons'],
-    'moon-phases': ['top', 'angled', 'earth'],
-    eclipses: ['side', 'moon', 'surface'],
+    'moon-phases': ['top', 'angled', 'earth', 'moon'],
+    eclipses: ['side', 'moon', 'surface', 'lunar-disc'],
     tides: ['top', 'angled', 'earth'],
     kepler: ['top', 'angled', 'side']
   }
@@ -334,7 +348,7 @@ function renderAll(): void {
 function renderSceneNav(): void {
   const mainDefinitions = PRIMARY_SCENE_IDS.map((id) => SCENE_BY_ID[id])
   document.querySelector('#scene-list')!.innerHTML = mainDefinitions.map((definition, index) => `
-    <button class="scene-button" data-scene="${definition.id}" aria-current="${definition.id === state.sceneId ? 'page' : 'false'}">
+    <button class="scene-button" data-scene="${definition.id}" aria-label="${index + 1} ${definition.shortLabel}" title="${definition.shortLabel}" aria-current="${definition.id === state.sceneId ? 'page' : 'false'}">
       <span class="scene-number">${index + 1}</span><span class="scene-label">${definition.shortLabel}</span>
     </button>`).join('')
   document.querySelector('#developer-lock-state')!.textContent = developerUnlocked ? '✓' : '🔒'
@@ -365,6 +379,7 @@ function renderTopbar(): void {
 function renderCameras(): void {
   document.querySelector('#camera-toolbar')!.innerHTML = cameras.map((camera) => `
     <button class="camera-button" data-camera="${camera.id}" aria-pressed="${camera.id === state.cameraPreset}">${camera.label}</button>`).join('')
+    + (state.sceneId === 'sun-path' ? `<a class="camera-button" id="legacy-sun-link" href="${import.meta.env.BASE_URL}legacy-sun.html" aria-label="切換舊版太陽教材">切換舊版</a>` : '')
 }
 
 function renderControls(): void {
@@ -450,6 +465,8 @@ function renderTransport(): void {
   play.textContent = state.playing ? 'Ⅱ' : '▶'
   play.setAttribute('aria-label', state.playing ? '暫停' : '播放')
   document.querySelector('#timeline-readout')!.textContent = timelineLabel()
+  const legacyLink = document.querySelector<HTMLAnchorElement>('#legacy-sun-link')
+  if (legacyLink) legacyLink.search = toUrlSearchParams(state).toString()
 }
 
 function timelineLabel(): string {
@@ -588,6 +605,12 @@ app.addEventListener('click', (event) => {
     return
   }
   switch (target.dataset.action) {
+    case 'toggle-nav': {
+      const collapsed = document.body.classList.toggle('nav-collapsed')
+      try { sessionStorage.setItem('hu-gege-celestial-lab:nav-collapsed', String(collapsed)) } catch { /* The menu still works without storage. */ }
+      updateSceneNav()
+      break
+    }
     case 'unlock-developer': {
       const password = document.querySelector<HTMLInputElement>('#developer-password')?.value ?? ''
       if (password === '0000') {

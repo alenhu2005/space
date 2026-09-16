@@ -79,13 +79,14 @@ export function createSunPath(context: BuildContext): SceneVisual {
     <header class="sun-view-heading"><h3>地球公轉與四季</h3><span class="sync-indicator">同步</span></header>
     <div class="sun-view-surface" data-viewport="comparison" aria-label="四季模型拖曳區；鍵盤可用斜視與俯視按鈕"></div>
     <div class="earth-light-legend"><span>☀ 受光面</span><span>◐ 晨昏線</span><span>背光面</span></div>
-    <div class="sun-view-cameras"><button class="camera-button" data-sun-camera="angled" aria-label="四季斜視">斜視</button><button class="camera-button" data-sun-camera="top" aria-label="四季俯視">俯視</button></div>
+    <div class="sun-view-cameras"><button class="camera-button" data-sun-camera="angled" aria-label="四季斜視">斜視</button><button class="camera-button" data-sun-camera="top" aria-label="四季俯視">俯視</button><button class="camera-button" data-sun-camera="earth" aria-label="地球晝夜特寫">地球特寫</button></div>
     <output class="sun-view-readout"></output>
   </section>`
   const viewElements = Array.from(overlay.querySelectorAll<HTMLElement>('.sun-view'))
   const localReadout = viewElements[0]!.querySelector('output')!
   const spaceReadout = viewElements[1]!.querySelector('output')!
   const pathLegend = overlay.querySelector<HTMLElement>('.sun-path-legend')!
+  const earthCamera = { id: 'earth', label: '地球晝夜特寫', position: new THREE.Vector3(0, 2.3, 1.5), target: new THREE.Vector3() }
 
   let cachedLatitude = Number.NaN
   let cachedDeclination = Number.NaN
@@ -103,9 +104,11 @@ export function createSunPath(context: BuildContext): SceneVisual {
     root, overlay,
     comparison: {
       root: seasons,
+      trackingCameraIds: ['earth'],
       cameras: [
         { id: 'angled', label: '四季斜視', position: new THREE.Vector3(0, 8.5, 5.5), target: new THREE.Vector3(0, 0, 0) },
-        { id: 'top', label: '四季俯視', position: new THREE.Vector3(0, 11, .01), target: new THREE.Vector3(0, 0, 0) }
+        { id: 'top', label: '四季俯視', position: new THREE.Vector3(0, 11, .01), target: new THREE.Vector3(0, 0, 0) },
+        earthCamera
       ]
     },
     cameras: [
@@ -139,6 +142,8 @@ export function createSunPath(context: BuildContext): SceneVisual {
       }
       const orbitalAngle = degreesToRadians(seasonAngle - 90)
       earthTilt.position.set(Math.cos(orbitalAngle) * orbitRadius, 0, -Math.sin(orbitalAngle) * orbitRadius)
+      earthCamera.target.copy(earthTilt.position)
+      earthCamera.position.copy(earthTilt.position).add(new THREE.Vector3(0, 2.3, 1.5))
       terminator.position.copy(earthTilt.position)
       terminator.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), earthTilt.position.clone().negate().normalize())
       rays.setDirection(earthTilt.position.clone().normalize())

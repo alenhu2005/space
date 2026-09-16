@@ -14,6 +14,8 @@ export interface CameraPreset {
   readonly label: string
   readonly position: THREE.Vector3
   readonly target: THREE.Vector3
+  /** Follow a moving target without resetting the user's zoom, angle or pan. */
+  readonly preserveOrbit?: boolean
 }
 
 export interface SceneVisual {
@@ -23,6 +25,7 @@ export interface SceneVisual {
   readonly comparison?: {
     readonly root: THREE.Group
     readonly cameras: readonly CameraPreset[]
+    readonly trackingCameraIds?: readonly string[]
   }
   readonly trackingCameraIds?: readonly string[]
   dispose?(): void

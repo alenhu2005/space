@@ -13,6 +13,7 @@ import {
   MakeTime,
   MoonPhase,
   Observer,
+  ObserverVector,
   RotateVector,
   Rotation_EQJ_EQD,
   Rotation_EQJ_HOR,
@@ -95,6 +96,8 @@ export interface AstronomyProvider {
   heliocentricVector(body: SupportedBody, instant: Date): CartesianVector
   /** Geocentric AU, in true ecliptic-of-date coordinates (ECT). Earth is the origin. */
   geocentricVector(body: SupportedBody, instant: Date): CartesianVector
+  /** Earth-centred AU, in true ecliptic-of-date coordinates (ECT). */
+  observerVector(instant: Date, observer: ObserverLocation): CartesianVector
   starHorizontalPosition(star: J2000StarPosition, instant: Date, observer: ObserverLocation): HorizontalBodyPosition
   moonPhaseAngle(instant: Date): number
   moonIlluminationFraction(instant: Date): number
@@ -244,6 +247,11 @@ export function createAstronomyProvider(): AstronomyProvider {
     geocentricVector(body: SupportedBody, instant: Date) {
       if (body === 'Earth') return { x: 0, y: 0, z: 0 }
       const vector = Ecliptic(GeoVector(BODIES[body], instant, true)).vec
+      return { x: vector.x, y: vector.y, z: vector.z }
+    },
+
+    observerVector(instant: Date, observer: ObserverLocation) {
+      const vector = Ecliptic(ObserverVector(instant, toObserver(observer), false)).vec
       return { x: vector.x, y: vector.y, z: vector.z }
     },
 

@@ -59,6 +59,15 @@ describe('AstronomyProvider', () => {
     expect(provider.moonIlluminationFraction(new Date('2025-03-14T06:59:00Z'))).toBeGreaterThan(.999)
   })
 
+  it('returns an observer surface vector in true ecliptic-of-date coordinates', () => {
+    const instant = new Date('2025-01-01T00:00:00Z')
+    const vector = provider.observerVector(instant, taipei)
+    const distanceKm = Math.hypot(vector.x, vector.y, vector.z) * 149_597_870.7
+    expect(distanceKm).toBeGreaterThan(6_350)
+    expect(distanceKm).toBeLessThan(6_390)
+    expect(Object.values(vector).every(Number.isFinite)).toBe(true)
+  })
+
   it('precesses J2000 stellar coordinates before converting to the local horizon', () => {
     const star = { rightAscensionHours: 0, declinationDegrees: 0 }
     const result = provider.starHorizontalPosition(star, new Date('2100-01-01T00:00:00Z'), taipei)

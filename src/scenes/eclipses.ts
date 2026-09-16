@@ -69,7 +69,8 @@ export function createEclipses(context: BuildContext): SceneVisual {
   const cameras = [
     { id: 'side', label: '太空影錐', position: new THREE.Vector3(-.8, 4.5, 14), target: new THREE.Vector3(-.8, 0, 0) },
     { id: 'moon', label: '月球附近', position: new THREE.Vector3(.35, .55, 1.25), target: new THREE.Vector3(1.8, 0, 0) },
-    { id: 'surface', label: '地表附近', position: new THREE.Vector3(1.12, .04, 0), target: new THREE.Vector3(-5.6, 0, 0) }
+    { id: 'surface', label: '地表附近', position: new THREE.Vector3(1.12, .04, 0), target: new THREE.Vector3(-5.6, 0, 0) },
+    { id: 'lunar-disc', label: '月面特寫', preserveOrbit: true, position: new THREE.Vector3(0, .5, 1.7), target: new THREE.Vector3() }
   ]
 
   function drawSection(shadow: ShadowGeometry, solar: boolean): void {
@@ -157,7 +158,7 @@ export function createEclipses(context: BuildContext): SceneVisual {
   return {
     root, overlay,
     cameras,
-    trackingCameraIds: ['surface', 'moon'],
+    trackingCameraIds: ['surface', 'moon', 'lunar-disc'],
     dispose: () => moonDisc.dispose(),
     update(state) {
       const instant = new Date(state.instant)
@@ -239,6 +240,8 @@ export function createEclipses(context: BuildContext): SceneVisual {
       const surfaceDirection = (solar ? sun : moon).position.clone().sub(earth.position).normalize()
       cameras[2]!.position.copy(earth.position).addScaledVector(surfaceDirection, .7)
       cameras[2]!.target.copy((solar ? sun : moon).position)
+      cameras[3]!.position.copy(moon.position).add(new THREE.Vector3(0, .5, 1.7))
+      cameras[3]!.target.copy(moon.position)
       moon.lookAt(earth.position)
       moonLabel.position.copy(moon.position).add(new THREE.Vector3(0, .55, 0))
       applyLayers(root, state)

@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>胡哥哥太陽視運動・舊版 2D</title>
+    <style>
+        :root { --bg: #050508; --panel: #121216; --accent: #00e5ff; --gold: #ffd700; --text: #eee; }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            height: 100dvh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+            overscroll-behavior: none;
+        }
+
+        /* --- Header --- */
+        header {
+            height: 44px;
+            flex-shrink: 0;
+            padding: 0 10px 0 15px;
+            padding-top: env(safe-area-inset-top);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(20,20,25,0.95);
+            border-bottom: 1px solid #333;
+            z-index: 10;
+        }
+        h2 { margin: 0; font-size: 0.95rem; color: #fff; letter-spacing: 0.5px; white-space: nowrap; }
+
+        .header-right { display: flex; align-items: center; gap: 10px; }
+
+        /* 資訊欄樣式調整 */
+        .stats {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #888;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .stats span { color: #eee; }
+        .stats .gold { color: var(--gold); font-weight: bold; }
+        .stats .cyan { color: var(--accent); font-weight: bold; }
+        .sep { color: #444; }
+
+        .btn-fullscreen {
+            background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
+            color: #ccc; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.2s;
+        }
+        .btn-fullscreen:hover { background: rgba(255,255,255,0.1); color: #fff; border-color: #fff; }
+        .btn-fullscreen svg { width: 16px; height: 16px; fill: currentColor; }
+
+        /* --- Main Layout --- */
+        .viewport-container {
+            flex-grow: 1; min-height: 0; display: flex; position: relative;
+            background: #000; flex-direction: row; touch-action: none;
+        }
+
+        .canvas-wrapper {
+            flex: 1; min-width: 0; min-height: 0; position: relative;
+            border-right: 1px solid #333; background: radial-gradient(circle at bottom, #1b2735 0%, #090a0f 100%);
+            touch-action: none;
+        }
+        .canvas-wrapper:last-child { border-right: none; }
+
+        canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+
+        /* --- Overlays --- */
+        .view-label {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.7); padding: 3px 8px; border-radius: 4px;
+            font-size: 0.75rem; color: var(--accent); border-left: 3px solid var(--accent);
+            pointer-events: none;
+        }
+
+        .cam-controls { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
+        .btn-cam {
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+            color: #eee; font-size: 0.7rem; padding: 4px 10px;
+            cursor: pointer; border-radius: 12px; transition: 0.2s; backdrop-filter: blur(4px);
+        }
+        .btn-cam:active { background: var(--accent); color: #000; }
+
+        .legend {
+            position: absolute; bottom: 8px; left: 8px; font-size: 0.7rem; color: #aaa;
+            background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; pointer-events: none;
+        }
+        .legend-row { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+        .line { width: 12px; height: 2px; }
+
+        /* --- Controls --- */
+        .controls-area {
+            padding-bottom: calc(10px + env(safe-area-inset-bottom));
+            background: var(--panel); border-top: 1px solid #333; padding: 10px 15px;
+            height: 160px; flex-shrink: 0;
+            display: grid; grid-template-columns: 260px 1fr 180px; gap: 20px;
+            overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+        }
+
+        .lat-col { display: flex; flex-direction: column; justify-content: space-around; gap: 2px; }
+        .lat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+        .btn-lat { background: rgba(255,255,255,0.08); border: none; color: #999; padding: 8px 0; font-size: 0.75rem; cursor: pointer; border-radius: 4px; }
+        .btn-lat.active { background: rgba(0, 229, 255, 0.2); color: var(--accent); font-weight: bold; box-shadow: 0 0 0 1px var(--accent) inset; }
+        .lbl-sm { font-size: 0.7rem; color: #666; }
+
+        .slider-col { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+        .slider-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #ccc; }
+        .lbl-w { width: 70px; text-align: right; color: #999; font-size: 0.75rem; }
+        input[type=range] { flex: 1; height: 20px; background: transparent; -webkit-appearance: none; cursor: pointer; }
+        input[type=range]::-webkit-slider-runnable-track { height: 4px; background: #333; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+        .val-disp { width: 55px; font-family: monospace; color: var(--gold); text-align: left; }
+
+        .action-col { display: flex; flex-direction: column; justify-content: space-between; }
+        .toggles { display: flex; flex-direction: column; gap: 8px; font-size: 0.8rem; color: #aaa; }
+        .toggles label { display: flex; align-items: center; gap: 6px; }
+        .btn-play {
+            width: 100%; padding: 12px; border: none; border-radius: 6px;
+            background: linear-gradient(135deg, #ff9800, #ff5722);
+            color: #fff; font-weight: bold; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            font-size: 0.9rem; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .btn-play.playing { background: linear-gradient(135deg, #f44336, #d32f2f); }
+
+        /* --- RWD --- */
+        @media (max-width: 800px) and (orientation: portrait) {
+            .viewport-container { flex-direction: column; }
+            .canvas-wrapper { border-right: none; border-bottom: 1px solid #333; width: 100%; height: 50%; }
+            .controls-area { height: auto; max-height: 40vh; grid-template-columns: 1fr; gap: 15px; padding-top: 15px; }
+            .slider-col { order: 1; }
+            .action-col { order: 2; flex-direction: row; align-items: center; gap: 10px; }
+            .lat-col    { order: 3; }
+            .toggles { flex-direction: row; flex-wrap: wrap; }
+            .btn-play { flex: 1; }
+            header h2 span { display: none; }
+
+            /* 手機版資訊欄縮小字體以容納更多內容 */
+            .stats { font-size: 0.65rem; gap: 5px; }
+        }
+
+        /* 極窄螢幕處理 */
+        @media (max-width: 360px) {
+            header h2 { display: none; } /* 隱藏標題，只顯示數據 */
+            .header-right { width: 100%; justify-content: space-between; }
+        }
+            .version-bar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex:none; min-height:44px; padding:4px 12px; background:#121216; border-bottom:1px solid #333; font-size:.7rem; }
+        .version-bar a { color:#00e5ff; display:inline-flex; align-items:center; min-height:36px; padding:4px 8px; border:1px solid #365458; border-radius:5px; text-decoration:none; }
+        .version-bar a:focus-visible { outline:2px solid #00e5ff; outline-offset:2px; }
+        .version-bar span { color:#ccc; }
+    </style>
+</head>
+<body>
+    <nav class="version-bar" aria-label="教材版本"><a id="back-to-lab" href="./?scene=sun-path" aria-label="返回新版 3D 太陽教材">返回新版 3D</a><span>舊版 2D・教學非等比例</span></nav>
+    <header>
+        <h2>胡哥哥太陽視運動 <span style="font-size:0.8em; opacity:0.6">演示</span></h2>
+        <div class="header-right">
+            <div class="stats">
+                <span id="txtLat">23.5°N</span>
+                <span class="sep">|</span>
+                <span id="txtTime" class="gold">12:00</span>
+                <span class="sep">|</span>
+                <span id="txtDayLen" class="cyan">晝長 13h 13m</span>
+            </div>
+
+            <button id="btnFull" class="btn-fullscreen" onclick="toggleFullScreen()" title="全螢幕">
+                <svg id="iconExpand" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                <svg id="iconCompress" viewBox="0 0 24 24" style="display:none"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <div class="viewport-container">
+        <div class="canvas-wrapper">
+            <div class="view-label">天球視角 (側視)</div>
+            <div class="cam-controls">
+                <button class="btn-cam" onclick="cam1.reset(-90, 15)">側視</button>
+                <button class="btn-cam" onclick="cam1.reset(-90, 89)">俯視</button>
+            </div>
+            <canvas id="cvsObs" aria-label="舊版天球視角模型"></canvas>
+            <div class="legend">
+                <div class="legend-row"><i class="line" style="background:var(--accent); height:3px;"></i> 地平</div>
+                <div class="legend-row"><i class="line" style="background:var(--gold)"></i> 軌跡</div>
+            </div>
+        </div>
+
+        <div class="canvas-wrapper">
+            <div class="view-label">太空視角 (自轉)</div>
+            <canvas id="cvsSpace" aria-label="舊版太空自轉模型"></canvas>
+        </div>
+    </div>
+
+    <div class="controls-area">
+        <div class="slider-col">
+            <div class="slider-row">
+                <div class="lbl-w">季節</div>
+                <input type="range" id="slSeason" min="-23.5" max="23.5" step="0.1" value="23.5">
+                <div class="val-disp" id="txtSeason">夏至</div>
+            </div>
+            <div class="slider-row">
+                <div class="lbl-w">時間</div>
+                <input type="range" id="slTime" min="0" max="23.95" step="0.05" value="12">
+                <div class="val-disp" id="txtTimeVal">12:00</div>
+            </div>
+            <div class="slider-row">
+                <div class="lbl-w">緯度</div>
+                <input type="range" id="slLat" aria-label="舊版觀察緯度" min="-90" max="90" step="0.5" value="23.5">
+                <div class="val-disp" id="txtLatVal">23.5°</div>
+            </div>
+            <div class="slider-row">
+                <div class="lbl-w">速度</div>
+                <input type="range" id="slSpeed" min="0.1" max="5.0" step="0.1" value="1.0">
+                <div class="val-disp" id="txtSpeed">1.0x</div>
+            </div>
+        </div>
+
+        <div class="action-col">
+            <div class="toggles">
+                <label><input type="checkbox" id="chk3Path" checked> 二分二至</label>
+                <label><input type="checkbox" id="chkEq" checked> 赤道</label>
+                <label><input type="checkbox" id="chkAxis" checked> 地軸</label>
+            </div>
+            <button id="btnPlay" class="btn-play" onclick="togglePlay()" aria-label="自動播放"><span>▶</span> 自動播放</button>
+        </div>
+
+        <div class="lat-col">
+            <div>
+                <div class="lbl-sm">北半球快速設定</div>
+                <div class="lat-grid">
+                    <button class="btn-lat" onclick="setLat(90)">90</button>
+                    <button class="btn-lat" onclick="setLat(66.5)">66.5</button>
+                    <button class="btn-lat" onclick="setLat(45)">45</button>
+                    <button class="btn-lat active" onclick="setLat(23.5)">23.5</button>
+                    <button class="btn-lat" onclick="setLat(0)">0</button>
+                </div>
+            </div>
+            <div>
+                <div class="lbl-sm">南半球快速設定</div>
+                <div class="lat-grid">
+                    <button class="btn-lat" onclick="setLat(-23.5)">23.5</button>
+                    <button class="btn-lat" onclick="setLat(-45)">45</button>
+                    <button class="btn-lat" onclick="setLat(-66.5)">66.5</button>
+                    <button class="btn-lat" onclick="setLat(-90)">90</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PI = Math.PI;
+        const rad = d => d * PI / 180;
+        const deg = r => r * 180 / PI;
+        const sin = Math.sin;
+        const cos = Math.cos;
+
+        const state = {
+            lat: 23.5,
+            dec: 23.5,
+            hour: 12,
+            speed: 1.0,
+            playing: false,
+            lastTime: 0,
+            opts: { show3: true, showEq: true, showAxis: true }
+        };
+
+        class Camera {
+            constructor(az, el) { this.az = az; this.el = el; this.dragging = false; this.lx=0; this.ly=0; }
+            reset(az, el) { this.az = az; this.el = el; render(); }
+        }
+
+        const cam1 = new Camera(-90, 15);
+        const cam2 = new Camera(0, 5);
+
+        const cvs1 = document.getElementById('cvsObs');
+        const ctx1 = cvs1.getContext('2d');
+        const cvs2 = document.getElementById('cvsSpace');
+        const ctx2 = cvs2.getContext('2d');
+
+        function project(ctx, x, y, z, w, h, cam, scale) {
+            const cx = w/2, cy = h/2;
+            const raz = rad(cam.az);
+            const rel = rad(cam.el);
+            let x1 = x * cos(raz) - z * sin(raz);
+            let z1 = x * sin(raz) + z * cos(raz);
+            let y1 = y;
+            let y2 = y1 * cos(rel) - z1 * sin(rel);
+            let z2 = y1 * sin(rel) + z1 * cos(rel);
+            let x2 = x1;
+            return { x: cx + x2 * scale, y: cy - y2 * scale, z: z2 };
+        }
+
+        const celToHor = (haDeg, decDeg, latDeg) => {
+            const h = rad(haDeg);
+            const d = rad(decDeg);
+            const L = rad(latDeg);
+            const y = sin(L)*sin(d) + cos(L)*cos(d)*cos(h);
+            const x = cos(L)*sin(d) - sin(L)*cos(d)*cos(h);
+            const z = -cos(d)*sin(h);
+            return { x: x, y: y, z: z };
+        };
+
+        function renderObserver() {
+            const w = cvs1.width, h = cvs1.height;
+            const scale = Math.min(w, h) * 0.32;
+            ctx1.clearRect(0, 0, w, h);
+            const proj = (x,y,z) => project(ctx1, x, y, z, w, h, cam1, scale);
+
+            ctx1.beginPath();
+            for(let i=0; i<=360; i+=2) {
+                let a = rad(i);
+                let p = proj(cos(a), 0, sin(a));
+                if(i===0) ctx1.moveTo(p.x, p.y); else ctx1.lineTo(p.x, p.y);
+            }
+            ctx1.closePath();
+            ctx1.fillStyle = 'rgba(0, 229, 255, 0.15)'; ctx1.fill();
+            ctx1.strokeStyle = '#00e5ff'; ctx1.lineWidth = 3; ctx1.stroke();
+
+            if(state.opts.showAxis) {
+                ctx1.beginPath();
+                let n = proj(1.1,0,0), s = proj(-1.1,0,0); ctx1.moveTo(n.x, n.y); ctx1.lineTo(s.x, s.y);
+                let e = proj(0,0,1.1), we = proj(0,0,-1.1); ctx1.moveTo(e.x, e.y); ctx1.lineTo(we.x, we.y);
+                ctx1.setLineDash([]); ctx1.strokeStyle = 'rgba(255,255,255,0.4)'; ctx1.lineWidth = 2; ctx1.stroke();
+            }
+
+            const txt = (t,x,y,z,c='#aaa') => {
+                let p = proj(x,y,z); ctx1.fillStyle=c; ctx1.font='bold 14px Arial'; ctx1.textAlign='center'; ctx1.fillText(t,p.x,p.y);
+            };
+            txt('北 (N)', 1.25, 0, 0, '#eee'); txt('南 (S)', -1.25, 0, 0); txt('東 (E)', 0, 0, 1.25); txt('西 (W)', 0, 0, -1.25);
+
+            const drawRing = (dec, color, w) => {
+                let prev = null;
+                for(let hDeg=-180; hDeg<=180; hDeg+=4) {
+                    let pos = celToHor(hDeg, dec, state.lat);
+                    let s = proj(pos.x, pos.y, pos.z);
+                    if(prev) {
+                        ctx1.beginPath(); ctx1.strokeStyle = color; ctx1.lineWidth = w;
+                        if(pos.y < 0) { ctx1.setLineDash([5, 5]); ctx1.globalAlpha = 0.4; }
+                        else { ctx1.setLineDash([]); ctx1.globalAlpha = 1.0; }
+                        ctx1.moveTo(prev.x, prev.y); ctx1.lineTo(s.x, s.y); ctx1.stroke();
+                    }
+                    prev = {x:s.x, y:s.y};
+                }
+                ctx1.setLineDash([]); ctx1.globalAlpha = 1.0;
+            };
+
+            if(state.opts.showEq) drawRing(0, 'cyan', 1);
+            if(state.opts.show3) {
+                drawRing(23.5, '#ff4444', 1); if(!state.opts.showEq) drawRing(0, '#ffff00', 1); drawRing(-23.5, '#4488ff', 1);
+            }
+            drawRing(state.dec, '#ffd700', 3);
+
+            const ha = (state.hour - 12) * 15;
+            const sunPos = celToHor(ha, state.dec, state.lat);
+            const sunS = proj(sunPos.x, sunPos.y, sunPos.z);
+            const gS = proj(sunPos.x, 0, sunPos.z);
+
+            ctx1.beginPath(); ctx1.moveTo(sunS.x, sunS.y); ctx1.lineTo(gS.x, gS.y);
+            ctx1.strokeStyle = 'rgba(255,255,0,0.3)'; ctx1.setLineDash([2,2]); ctx1.stroke(); ctx1.setLineDash([]);
+
+            ctx1.beginPath(); ctx1.arc(sunS.x, sunS.y, 8, 0, PI*2);
+            ctx1.fillStyle = sunPos.y < 0 ? '#555' : '#ffd700'; ctx1.fill(); ctx1.strokeStyle = sunPos.y < 0 ? '#888' : '#fff'; ctx1.stroke();
+
+            if(state.opts.showAxis) {
+                let p = celToHor(0, 90, state.lat);
+                let p1 = proj(p.x * 1.3, p.y * 1.3, p.z * 1.3);
+                let p2 = proj(-p.x * 1.3, -p.y * 1.3, -p.z * 1.3);
+                ctx1.beginPath(); ctx1.moveTo(p1.x, p1.y); ctx1.lineTo(p2.x, p2.y);
+                ctx1.setLineDash([]); ctx1.strokeStyle='#fff'; ctx1.lineWidth=1; ctx1.stroke();
+            }
+        }
+
+        function renderSpace() {
+            const w = cvs2.width, h = cvs2.height;
+            const scale = Math.min(w, h) * 0.3;
+            ctx2.clearRect(0, 0, w, h);
+            const cx = w/2, cy = h/2;
+            const projS = (x,y,z) => project(ctx2, x, y, z, w, h, cam2, scale);
+            const tilt = rad(-state.dec);
+            const applyTilt = (x, y, z) => ({ x: x * cos(tilt) - y * sin(tilt), y: x * sin(tilt) + y * cos(tilt), z: z });
+
+            let axisLen = 1.4;
+            let np = applyTilt(0, axisLen, 0); let sp = applyTilt(0, -axisLen, 0);
+            let npS = projS(np.x, np.y, np.z); let spS = projS(sp.x, sp.y, sp.z);
+
+            ctx2.beginPath(); ctx2.moveTo(npS.x, npS.y); ctx2.lineTo(spS.x, spS.y);
+            ctx2.strokeStyle = '#cccccc'; ctx2.lineWidth = 4; ctx2.lineCap = 'round'; ctx2.stroke();
+
+            ctx2.beginPath(); ctx2.arc(cx, cy, scale, 0, PI*2);
+            ctx2.fillStyle = 'rgba(20, 30, 50, 0.8)'; ctx2.fill();
+
+            let earthSpin = rad((state.hour - 12) * 15);
+            const getSpherePos = (lonDeg, latDeg) => {
+                let effLon = rad(lonDeg) - earthSpin;
+                let la = rad(latDeg);
+                let x = cos(la) * cos(effLon);
+                let y = sin(la);
+                let z = cos(la) * sin(effLon);
+                return applyTilt(x, y, z);
+            };
+
+            for(let lon=0; lon<360; lon+=30) {
+                ctx2.beginPath();
+                for(let lat=-90; lat<=90; lat+=5) {
+                    let p = getSpherePos(lon, lat);
+                    let s = projS(p.x, p.y, p.z);
+                    if(lat===-90) ctx2.moveTo(s.x, s.y); else ctx2.lineTo(s.x, s.y);
+                }
+                ctx2.strokeStyle = (lon===0) ? '#00ffff' : 'rgba(255,255,255,0.15)'; ctx2.lineWidth = (lon===0) ? 2 : 1; ctx2.stroke();
+            }
+
+            for(let lat=-60; lat<=60; lat+=30) {
+                ctx2.beginPath();
+                for(let lon=0; lon<=360; lon+=5) {
+                    let p = getSpherePos(lon, lat);
+                    let s = projS(p.x, p.y, p.z);
+                    if(lon===0) ctx2.moveTo(s.x, s.y); else ctx2.lineTo(s.x, s.y);
+                }
+                ctx2.strokeStyle = 'rgba(255,255,255,0.1)'; ctx2.lineWidth=1; ctx2.stroke();
+            }
+
+            ctx2.beginPath();
+            for(let lon=0; lon<=360; lon+=5) {
+                let la = rad(state.lat), lo = rad(lon);
+                let p = applyTilt(cos(la)*cos(lo), sin(la), cos(la)*sin(lo));
+                let s = projS(p.x, p.y, p.z);
+                if(lon===0) ctx2.moveTo(s.x, s.y); else ctx2.lineTo(s.x, s.y);
+            }
+            ctx2.strokeStyle = '#0f0'; ctx2.lineWidth=1.5; ctx2.stroke();
+
+            ctx2.save();
+            ctx2.beginPath(); ctx2.arc(cx, cy, scale, 0, PI*2); ctx2.clip();
+            let shadowGrad = ctx2.createLinearGradient(cx - scale, 0, cx + scale, 0);
+            shadowGrad.addColorStop(0.0, 'rgba(0,0,0,0.92)'); shadowGrad.addColorStop(0.48, 'rgba(0,0,0,0.9)');
+            shadowGrad.addColorStop(0.5, 'rgba(0,0,0,0.5)'); shadowGrad.addColorStop(0.52, 'rgba(0,0,0,0)'); shadowGrad.addColorStop(1.0, 'rgba(0,0,0,0)');
+            ctx2.fillStyle = shadowGrad; ctx2.fillRect(0, 0, w, h); ctx2.restore();
+
+            let obsW = getSpherePos(0, state.lat);
+            let obsScr = projS(obsW.x, obsW.y, obsW.z);
+            let isNight = obsW.x < -0.05;
+            let stickEnd = getSpherePos(0, state.lat); stickEnd.x *= 1.25; stickEnd.y *= 1.25; stickEnd.z *= 1.25;
+            let stickScr = projS(stickEnd.x, stickEnd.y, stickEnd.z);
+
+            ctx2.beginPath(); ctx2.moveTo(obsScr.x, obsScr.y); ctx2.lineTo(stickScr.x, stickScr.y); ctx2.strokeStyle = 'magenta'; ctx2.lineWidth=2; ctx2.stroke();
+            ctx2.beginPath(); ctx2.arc(obsScr.x, obsScr.y, 6, 0, PI*2);
+            ctx2.fillStyle = isNight ? '#555' : '#f0f'; ctx2.fill(); ctx2.strokeStyle = isNight ? '#999' : '#fff'; ctx2.stroke();
+
+            ctx2.font="bold 14px Arial"; ctx2.fillStyle="#fff"; ctx2.textAlign="center"; ctx2.fillText("N", npS.x, npS.y - 10);
+
+            // 繪製緯度標籤
+            ctx2.textAlign = 'left'; ctx2.textBaseline = 'middle'; ctx2.font = 'bold 12px Arial';
+            const latLabels = [
+                { lat: 66.5, t: '66.5°N' },
+                { lat: 23.5, t: '23.5°N' },
+                { lat: 0, t: '0°' },
+                { lat: -23.5, t: '23.5°S' },
+                { lat: -66.5, t: '66.5°S' }
+            ];
+
+            for (let l of latLabels) {
+                let rLat = cos(rad(l.lat));
+                let yLat = sin(rad(l.lat));
+                let p = applyTilt(rLat, yLat, 0);
+                let s = projS(p.x, p.y, p.z);
+                let labelX = s.x + 15; let labelY = s.y;
+
+                ctx2.beginPath(); ctx2.moveTo(s.x, s.y); ctx2.lineTo(labelX - 3, labelY);
+                ctx2.strokeStyle = 'rgba(255,255,255,0.5)'; ctx2.lineWidth = 1; ctx2.stroke();
+
+                let tw = ctx2.measureText(l.t).width;
+                ctx2.fillStyle = 'rgba(0,0,0,0.7)'; ctx2.fillRect(labelX - 2, labelY - 7, tw + 4, 14);
+                ctx2.fillStyle = '#ddd';
+                if(Math.abs(l.lat) === 23.5) ctx2.fillStyle = '#ffd700';
+                if(l.lat === 0) ctx2.fillStyle = '#00ffff';
+                ctx2.fillText(l.t, labelX, labelY);
+            }
+        }
+
+        function render() { renderObserver(); renderSpace(); }
+
+        function updateState() {
+            state.lat = parseFloat(document.getElementById('slLat').value);
+            state.dec = parseFloat(document.getElementById('slSeason').value);
+            state.speed = parseFloat(document.getElementById('slSpeed').value);
+            if(!state.playing) state.hour = parseFloat(document.getElementById('slTime').value);
+
+            state.opts.show3 = document.getElementById('chk3Path').checked;
+            state.opts.showEq = document.getElementById('chkEq').checked;
+            state.opts.showAxis = document.getElementById('chkAxis').checked;
+
+            const latDir = state.lat>=0?'N':'S';
+            document.getElementById('txtLat').innerText = Math.abs(state.lat).toFixed(1)+ "°" + latDir;
+            document.getElementById('txtLatVal').innerText = Math.abs(state.lat).toFixed(1)+ "°";
+
+            const h=Math.floor(state.hour), m=Math.floor((state.hour-h)*60);
+            const tStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+            document.getElementById('txtTime').innerText = tStr;
+            document.getElementById('txtTimeVal').innerText = tStr;
+            document.getElementById('txtSpeed').innerText = state.speed.toFixed(1) + "x";
+
+            let sTxt = state.dec.toFixed(1);
+            if(Math.abs(state.dec-23.5)<1) sTxt="夏至";
+            if(Math.abs(state.dec+23.5)<1) sTxt="冬至";
+            if(Math.abs(state.dec)<1) sTxt="春秋分";
+            document.getElementById('txtSeason').innerText = sTxt;
+
+            // 計算晝長
+            let val = -Math.tan(rad(state.lat)) * Math.tan(rad(state.dec));
+            let dayH = 0;
+            if (val >= 1) dayH = 0; // 極夜
+            else if (val <= -1) dayH = 24; // 極晝
+            else dayH = deg(Math.acos(val)) * 2 / 15;
+
+            let dh = Math.floor(dayH);
+            let dm = Math.floor((dayH - dh) * 60);
+            document.getElementById('txtDayLen').innerText = `晝長 ${dh}h ${dm}m`;
+
+            document.querySelectorAll('.btn-lat').forEach(b => b.classList.remove('active'));
+            render();
+        }
+
+        function setLat(v) { document.getElementById('slLat').value = v; updateState(); }
+        function togglePlay() {
+            state.playing = !state.playing;
+            document.getElementById('btnPlay').setAttribute('aria-label', state.playing ? '暫停' : '自動播放');
+            document.getElementById('btnPlay').classList.toggle('playing');
+            document.getElementById('btnPlay').innerHTML = state.playing ? "<span>⏸</span> 暫停" : "<span>▶</span> 自動播放";
+            if(state.playing) { state.lastTime = performance.now(); requestAnimationFrame(loop); }
+        }
+        function loop(now) {
+            if(!state.playing) return;
+            const dt = now - state.lastTime;
+            state.lastTime = now;
+            state.hour += (dt / 200) * state.speed;
+            if(state.hour >= 24) state.hour = 0;
+            document.getElementById('slTime').value = state.hour;
+            updateState();
+            requestAnimationFrame(loop);
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => { console.log("FullScreen Failed:", err); });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        document.addEventListener('fullscreenchange', () => {
+            const isFull = !!document.fullscreenElement;
+            document.getElementById('iconExpand').style.display = isFull ? 'none' : 'block';
+            document.getElementById('iconCompress').style.display = isFull ? 'block' : 'none';
+        });
+
+        ['slLat', 'slSeason', 'slTime', 'slSpeed'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                if(state.playing && id==='slTime') togglePlay();
+                updateState();
+            });
+        });
+        ['chk3Path', 'chkEq', 'chkAxis'].forEach(id => document.getElementById(id).addEventListener('change', updateState));
+
+        function bindDrag(cvs, cam) {
+            const start = (e) => { cam.dragging = true; cam.lx = e.clientX||e.touches[0].clientX; cam.ly = e.clientY||e.touches[0].clientY; };
+            const move = (e) => {
+                if(!cam.dragging) return;
+                if(e.cancelable) e.preventDefault();
+                let x = e.clientX||e.touches[0].clientX, y = e.clientY||e.touches[0].clientY;
+                cam.az -= (x - cam.lx)*0.5; cam.el += (y - cam.ly)*0.5;
+                if(cam.el>89)cam.el=89; if(cam.el<-89)cam.el=-89;
+                cam.lx = x; cam.ly = y;
+                render();
+            };
+            const end = () => cam.dragging = false;
+            cvs.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+            cvs.addEventListener('touchstart', start, {passive:false}); window.addEventListener('touchmove', move, {passive:false}); window.addEventListener('touchend', end);
+        }
+        bindDrag(cvs1, cam1);
+
+        function resizeCanvas() {
+            const w1 = cvs1.parentElement.clientWidth, h1 = cvs1.parentElement.clientHeight;
+            cvs1.width = w1; cvs1.height = h1;
+            const w2 = cvs2.parentElement.clientWidth, h2 = cvs2.parentElement.clientHeight;
+            cvs2.width = w2; cvs2.height = h2;
+            render();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
+
+        setTimeout(() => { resizeCanvas(); updateState(); }, 50);
+
+    </script>
+    <script>
+        const returnParameters = new URLSearchParams(window.location.search);
+        returnParameters.set('scene', 'sun-path');
+        document.getElementById('back-to-lab').href = './?' + returnParameters.toString();
+    </script>
+</body>
+</html>
