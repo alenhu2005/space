@@ -122,6 +122,7 @@ test('太陽雙視窗共用時間與季節，旋轉與螢幕方向可獨立操�
   await expect(space).toBeVisible()
   await expect(space.getByText('觀測者自轉軌跡', { exact: true })).toBeVisible()
   await expect(space).toHaveAttribute('data-observer-trail-latitude', '25.033')
+  await expect(space).toHaveAttribute('data-observer-trail-style', 'solid')
   await expect(local.locator('.sun-view-surface')).not.toHaveAttribute('tabindex', '0')
   await expect(space.locator('.sun-view-surface')).not.toHaveAttribute('tabindex', '0')
   await lab.openControls()

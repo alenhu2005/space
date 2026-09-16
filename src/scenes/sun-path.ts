@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { degreesToRadians, radiansToDegrees, dayLengthHours, horizontalCoordinates } from '../core/astro-math'
-import { COLORS, ring, circlePoints, lineFromPoints, createSun, createEarth, createArrow } from '../rendering/helpers'
+import { COLORS, ring, lineFromPoints, createSun, createEarth, createArrow } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, horizontalVector, riseSetMetrics, type BuildContext, type SceneVisual } from './shared'
 
 export function createSunPath(context: BuildContext): SceneVisual {
@@ -52,7 +52,12 @@ export function createSunPath(context: BuildContext): SceneVisual {
     addLabel(seasons, text, new THREE.Vector3(x, -.18, z), '#eef7f5', .46)
   }
   const observerTrailRadius = .59
-  const observerTrail = lineFromPoints(circlePoints(observerTrailRadius, 128), COLORS.cyan, .85, true)
+  const observerTrailTubeRadius = .009
+  const observerTrail = new THREE.Mesh(
+    new THREE.TorusGeometry(observerTrailRadius, observerTrailTubeRadius, 8, 128),
+    new THREE.MeshBasicMaterial({ color: COLORS.cyan, transparent: true, opacity: .9 })
+  )
+  observerTrail.rotation.x = Math.PI / 2
   observerTrail.userData.layer = 'paths'
   const observer = new THREE.Mesh(new THREE.SphereGeometry(.065, 16, 12), new THREE.MeshBasicMaterial({ color: COLORS.cyan }))
   const observerNormal = createArrow(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), .42, COLORS.cyan)
@@ -94,6 +99,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
 
   let cachedLatitude = Number.NaN
   let cachedDeclination = Number.NaN
+  let cachedObserverTrailLatitude = Number.NaN
   const updatePath = (line: THREE.Line, latitude: number, declination: number): void => {
     const points = Array.from({ length: 145 }, (_, index) => {
       const hourAngle = -180 + index * 2.5
@@ -161,8 +167,12 @@ export function createSunPath(context: BuildContext): SceneVisual {
       const latitudeRadians = degreesToRadians(latitude)
       const latitudeRadius = Math.cos(latitudeRadians)
       const normal = new THREE.Vector3(latitudeRadius * Math.cos(longitude), Math.sin(latitudeRadians), latitudeRadius * Math.sin(longitude))
+      if (latitude !== cachedObserverTrailLatitude) {
+        observerTrail.geometry.dispose()
+        observerTrail.geometry = new THREE.TorusGeometry(Math.max(.001, observerTrailRadius * latitudeRadius), observerTrailTubeRadius, 8, 128)
+        cachedObserverTrailLatitude = latitude
+      }
       observerTrail.position.y = Math.sin(latitudeRadians) * observerTrailRadius
-      observerTrail.scale.set(latitudeRadius, 1, latitudeRadius)
       observer.position.copy(normal).multiplyScalar(.585)
       observerNormal.position.copy(observer.position)
       observerNormal.setDirection(normal)
@@ -189,6 +199,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
         view.dataset.instant = state.instant
       }
       viewElements[1]!.dataset.observerTrailLatitude = String(latitude)
+      viewElements[1]!.dataset.observerTrailStyle = 'solid'
       return [
         { label: '太陽高度', value: `${position.altitude.toFixed(1)}°` },
         { label: '方位角', value: `${position.azimuth.toFixed(1)}°` },
