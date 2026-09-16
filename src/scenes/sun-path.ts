@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { degreesToRadians, radiansToDegrees, dayLengthHours, horizontalCoordinates } from '../core/astro-math'
-import { COLORS, ring, lineFromPoints, createSun, createEarth, createArrow } from '../rendering/helpers'
+import { COLORS, ring, circlePoints, lineFromPoints, createSun, createEarth, createArrow } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, horizontalVector, riseSetMetrics, type BuildContext, type SceneVisual } from './shared'
 
 export function createSunPath(context: BuildContext): SceneVisual {
@@ -51,10 +51,13 @@ export function createSunPath(context: BuildContext): SceneVisual {
   for (const [text, x, z] of [['春分', 0, 3.25], ['夏至', 3.25, 0], ['秋分', 0, -3.25], ['冬至', -3.25, 0]] as const) {
     addLabel(seasons, text, new THREE.Vector3(x, -.18, z), '#eef7f5', .46)
   }
+  const observerTrailRadius = .59
+  const observerTrail = lineFromPoints(circlePoints(observerTrailRadius, 128), COLORS.cyan, .85, true)
+  observerTrail.userData.layer = 'paths'
   const observer = new THREE.Mesh(new THREE.SphereGeometry(.065, 16, 12), new THREE.MeshBasicMaterial({ color: COLORS.cyan }))
   const observerNormal = createArrow(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), .42, COLORS.cyan)
   observerNormal.userData.layer = 'paths'
-  earthTilt.add(observer, observerNormal)
+  earthTilt.add(observerTrail, observer, observerNormal)
   const rays = createArrow(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1.6, COLORS.amber)
   rays.userData.layer = 'shadows'
   seasons.add(rays)
@@ -78,7 +81,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
   <section class="sun-view" role="region" aria-label="地球公轉與四季">
     <header class="sun-view-heading"><h3>地球公轉與四季</h3><span class="sync-indicator">同步</span></header>
     <div class="sun-view-surface" data-viewport="comparison" aria-label="公轉自由視角；拖曳旋轉、滾輪或雙指縮放、右鍵或雙指平移"></div>
-    <div class="earth-light-legend"><span>☀ 受光面</span><span>◐ 晨昏線</span><span>背光面</span></div>
+    <div class="earth-light-legend"><span>☀ 受光面</span><span>◐ 晨昏線</span><span class="night-side-key">背光面</span><span class="observer-trail-key">觀測者自轉軌跡</span></div>
     <div class="sun-view-cameras"><button class="camera-button" data-sun-camera="free" aria-label="自由公轉視角" title="拖曳旋轉・滾輪縮放・右鍵或雙指平移">自由</button><button class="camera-button" data-sun-camera="top" aria-label="四季俯視">俯視</button><button class="camera-button" data-sun-camera="earth" aria-label="地球晝夜特寫">地球特寫</button></div>
     <output class="sun-view-readout"></output>
   </section>`
@@ -86,6 +89,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
   const localReadout = viewElements[0]!.querySelector('output')!
   const spaceReadout = viewElements[1]!.querySelector('output')!
   const pathLegend = overlay.querySelector<HTMLElement>('.sun-path-legend')!
+  const observerTrailLegend = overlay.querySelector<HTMLElement>('.observer-trail-key')!
   const earthCamera = { id: 'earth', label: '地球晝夜特寫', position: new THREE.Vector3(0, 2.3, 1.5), target: new THREE.Vector3() }
 
   let cachedLatitude = Number.NaN
@@ -154,7 +158,11 @@ export function createSunPath(context: BuildContext): SceneVisual {
         ? context.astronomy.localSiderealDegrees(instant, state.observer.longitude) - real!.rightAscension * 15
         : (hour - 12) * 15
       const longitude = Math.atan2(sunInEarthFrame.z, sunInEarthFrame.x) + degreesToRadians(hourAngle)
-      const normal = new THREE.Vector3(Math.cos(degreesToRadians(latitude)) * Math.cos(longitude), Math.sin(degreesToRadians(latitude)), Math.cos(degreesToRadians(latitude)) * Math.sin(longitude))
+      const latitudeRadians = degreesToRadians(latitude)
+      const latitudeRadius = Math.cos(latitudeRadians)
+      const normal = new THREE.Vector3(latitudeRadius * Math.cos(longitude), Math.sin(latitudeRadians), latitudeRadius * Math.sin(longitude))
+      observerTrail.position.y = Math.sin(latitudeRadians) * observerTrailRadius
+      observerTrail.scale.set(latitudeRadius, 1, latitudeRadius)
       observer.position.copy(normal).multiplyScalar(.585)
       observerNormal.position.copy(observer.position)
       observerNormal.setDirection(normal)
@@ -169,6 +177,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
       applyLayers(root, state)
       applyLayers(seasons, state)
       pathLegend.hidden = !state.layers.paths
+      observerTrailLegend.hidden = !state.layers.paths
       footprint.visible = state.layers.shadows && irradiance > 0
       const signedDeclination = `${declination < 0 ? '−' : ''}${Math.abs(declination).toFixed(1)}`
       localReadout.textContent = `緯度 ${latitude.toFixed(1)}° · 赤緯 ${signedDeclination}° · ${position.altitude > 0 ? '白天' : '夜晚'}`
@@ -179,6 +188,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
         view.dataset.timeline = String(state.timeline)
         view.dataset.instant = state.instant
       }
+      viewElements[1]!.dataset.observerTrailLatitude = String(latitude)
       return [
         { label: '太陽高度', value: `${position.altitude.toFixed(1)}°` },
         { label: '方位角', value: `${position.azimuth.toFixed(1)}°` },

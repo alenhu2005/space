@@ -208,7 +208,10 @@ body.pseudo-fullscreen .control-panel { z-index: 40; }
 .sun-path-legend { position: absolute; top: 46px; left: 9px; display: flex; gap: 9px; font-size: .59rem; }
 .earth-light-legend { position: absolute; top: 46px; left: 9px; display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: .59rem; }
 .earth-light-legend span:first-child { color: var(--amber); }
-.earth-light-legend span:last-child { color: #99abd2; }
+.earth-light-legend .night-side-key { color: #99abd2; }
+.earth-light-legend .observer-trail-key { color: var(--cyan); }
+.earth-light-legend .observer-trail-key::before { content: '⋯ '; }
+.earth-light-legend .observer-trail-key[hidden] { display: none; }
 .sun-path-legend[hidden], .shadow-legend[hidden] { display: none; }
 .summer-key { color: var(--red); }
 .equinox-key { color: var(--cyan); }
