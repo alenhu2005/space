@@ -1,5 +1,3 @@
-const SYNODIC_MONTH_DAYS = 29.53059
-
 export const OBSERVER_TIME_ZONES = Object.freeze([
   { value: 0, id: 'Asia/Taipei', label: '台北（UTC+8）' },
   { value: 1, id: 'UTC', label: '世界協調時間（UTC）' },
@@ -18,24 +16,24 @@ function clean(value: number): number {
   return Math.abs(value) < 1e-12 ? 0 : value
 }
 
-/** Local apparent solar time after the model has advanced through a synodic month. */
-export function teachingSolarTime(initialHour: number, timeline: number): number {
-  return modulo(initialHour + timeline * SYNODIC_MONTH_DAYS * 24, 24)
-}
-
 /**
- * Surface direction in scene coordinates. The model Sun is at -x; local
- * 18:00 therefore rotates the observer toward +z.
+ * Fixed surface direction in scene coordinates. Longitude 0 is +x and
+ * longitude 90 degrees east is +z.
  */
-export function teachingObserverDirection(latitude: number, solarHour: number): { readonly x: number; readonly y: number; readonly z: number } {
+export function teachingObserverDirection(latitude: number, longitude: number): { readonly x: number; readonly y: number; readonly z: number } {
   const latitudeRadians = Math.max(-90, Math.min(90, latitude)) * Math.PI / 180
-  const hourAngle = (modulo(solarHour, 24) - 12) * Math.PI / 12
+  const longitudeRadians = modulo(longitude, 360) * Math.PI / 180
   const horizontal = Math.cos(latitudeRadians)
   return {
-    x: clean(-horizontal * Math.cos(hourAngle)),
+    x: clean(horizontal * Math.cos(longitudeRadians)),
     y: clean(Math.sin(latitudeRadians)),
-    z: clean(horizontal * Math.sin(hourAngle))
+    z: clean(horizontal * Math.sin(longitudeRadians))
   }
+}
+
+export function teachingMoonEvents(phaseAngle: number): { readonly rise: number; readonly transit: number; readonly set: number } {
+  const rise = modulo(6 + phaseAngle / 15, 24)
+  return { rise, transit: modulo(rise + 6, 24), set: modulo(rise + 12, 24) }
 }
 
 export function observerTimeZone(value: number): string {
@@ -52,19 +50,18 @@ export function formatObserverTime(instant: Date, timeZone: string): string {
   return `${value('year')}/${value('month')}/${value('day')} ${value('hour')}:${value('minute')}`
 }
 
+export function formatObserverEventTime(instant: Date | null, timeZone: string): string {
+  if (!instant) return '24h 內無事件'
+  return new Intl.DateTimeFormat('zh-TW', {
+    timeZone, month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).format(instant)
+}
+
 export function formatObserverCoordinates(latitude: number, longitude: number): string {
   const latitudeHemisphere = latitude >= 0 ? 'N' : 'S'
   const longitudeHemisphere = longitude >= 0 ? 'E' : 'W'
   return `${Math.abs(latitude).toFixed(2)}°${latitudeHemisphere}・${Math.abs(longitude).toFixed(2)}°${longitudeHemisphere}`
-}
-
-export function formatTeachingObserverLocation(latitude: number, solarHour: number): string {
-  const latitudeHemisphere = latitude >= 0 ? 'N' : 'S'
-  const relativeLongitude = modulo((solarHour - 12) * 15 + 180, 360) - 180
-  const relativeLabel = Math.abs(relativeLongitude) < .005
-    ? '日下點經線'
-    : `日下點${relativeLongitude > 0 ? '東' : '西'} ${Math.abs(relativeLongitude).toFixed(1)}°`
-  return `${Math.abs(latitude).toFixed(1)}°${latitudeHemisphere}・${relativeLabel}`
 }
 
 export function formatSolarHour(hour: number): string {

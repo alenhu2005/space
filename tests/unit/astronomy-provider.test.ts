@@ -209,7 +209,11 @@ describe('AstronomyProvider', () => {
 
   it('handles polar Sun rise/set and actual Moon rise', () => {
     const polar = provider.riseSet('Sun', new Date('2025-06-21T00:00:00Z'), { latitude: 80, longitude: 0, elevation: 0 })
-    expect(polar).toEqual({ rise: null, set: null })
-    expect(provider.riseSet('Moon', new Date('2025-06-21T00:00:00Z'), taipei).rise).toBeInstanceOf(Date)
+    expect(polar.rise).toBeNull()
+    expect(polar.transit).toBeInstanceOf(Date)
+    expect(polar.set).toBeNull()
+    const moon = provider.riseSet('Moon', new Date('2025-06-21T00:00:00Z'), taipei)
+    expect(moon.rise).toBeInstanceOf(Date)
+    expect(moon.transit).toBeInstanceOf(Date)
   })
 })

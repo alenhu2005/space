@@ -57,8 +57,12 @@ export function riseSetMetrics(astronomy: AstronomyProvider, body: 'Sun' | 'Moon
     if (nextKey !== key || Date.parse(state.instant) >= validUntil) {
       const result = astronomy.riseSet(body, new Date(state.instant), state.observer)
       const format = (date: Date | null): string => date ? date.toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '24h 內無事件'
-      validUntil = Math.min(result.rise?.getTime() ?? Infinity, result.set?.getTime() ?? Infinity)
-      metrics = [{ label: `${body === 'Sun' ? '日' : '月'}升（裝置時區）`, value: format(result.rise) }, { label: `${body === 'Sun' ? '日' : '月'}落`, value: format(result.set) }]
+      validUntil = Math.min(result.rise?.getTime() ?? Infinity, result.transit.getTime(), result.set?.getTime() ?? Infinity)
+      metrics = [
+        { label: `${body === 'Sun' ? '日' : '月'}升（裝置時區）`, value: format(result.rise) },
+        ...(body === 'Moon' ? [{ label: '月球中天', value: format(result.transit) }] : []),
+        { label: `${body === 'Sun' ? '日' : '月'}落`, value: format(result.set) }
+      ]
       key = nextKey
     }
     return metrics

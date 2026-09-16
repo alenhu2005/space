@@ -98,7 +98,7 @@ export function createStage(
   comparisonScene.add(new THREE.HemisphereLight(0x98c7d4, 0x071013, .06))
   const comparisonCamera = new THREE.PerspectiveCamera(42, 1, .005, 1500)
   let comparisonControls: OrbitControls | undefined
-  let comparisonCameraId = 'angled'
+  let comparisonCameraId = 'free'
   let comparisonTrackedTarget: THREE.Vector3 | undefined
   let primarySurface: HTMLElement = container
   let comparisonSurface: HTMLElement | undefined
@@ -368,8 +368,19 @@ export function createStage(
         comparisonControls = new OrbitControls(comparisonCamera, comparisonSurface)
         comparisonControls.enableDamping = true
         comparisonControls.zoomToCursor = true
-        comparisonControls.minDistance = .75
-        comparisonControls.maxDistance = 60
+        comparisonControls.enableRotate = true
+        comparisonControls.enablePan = true
+        comparisonControls.enableZoom = true
+        comparisonControls.screenSpacePanning = true
+        comparisonControls.minPolarAngle = 0
+        comparisonControls.maxPolarAngle = Math.PI
+        comparisonControls.minDistance = .25
+        comparisonControls.maxDistance = 250
+        comparisonControls.mouseButtons.LEFT = THREE.MOUSE.ROTATE
+        comparisonControls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY
+        comparisonControls.mouseButtons.RIGHT = THREE.MOUSE.PAN
+        comparisonControls.touches.ONE = THREE.TOUCH.ROTATE
+        comparisonControls.touches.TWO = THREE.TOUCH.DOLLY_PAN
         visual.overlay.addEventListener('click', (event) => {
           const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-sun-camera]')
           if (button) selectComparisonCamera(button.dataset.sunCamera!)
@@ -398,13 +409,13 @@ export function createStage(
       activeRenderer.shadowMap.enabled = state.sceneId === 'eclipses' && state.mode === 'teaching' && state.layers.shadows
       const scale = visual?.cameraScale?.(state) ?? 1
       if (cameraChanged || scale !== previousCameraScale) selectCamera(state.cameraPreset)
-      if (cameraChanged && state.cameraPreset === 'seasons') selectComparisonCamera('angled')
+      if (cameraChanged && state.cameraPreset === 'seasons') selectComparisonCamera('free')
       previousCameraScale = scale
     },
     resize,
     focusCamera(id) {
       selectCamera(id)
-      if (id === 'seasons') selectComparisonCamera('angled')
+      if (id === 'seasons') selectComparisonCamera('free')
     },
     dispose() {
       activeRenderer.setAnimationLoop(null)

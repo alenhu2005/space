@@ -77,9 +77,9 @@ export function createSunPath(context: BuildContext): SceneVisual {
   </section>
   <section class="sun-view" role="region" aria-label="地球公轉與四季">
     <header class="sun-view-heading"><h3>地球公轉與四季</h3><span class="sync-indicator">同步</span></header>
-    <div class="sun-view-surface" data-viewport="comparison" aria-label="四季模型拖曳區；鍵盤可用斜視與俯視按鈕"></div>
+    <div class="sun-view-surface" data-viewport="comparison" aria-label="公轉自由視角；拖曳旋轉、滾輪或雙指縮放、右鍵或雙指平移"></div>
     <div class="earth-light-legend"><span>☀ 受光面</span><span>◐ 晨昏線</span><span>背光面</span></div>
-    <div class="sun-view-cameras"><button class="camera-button" data-sun-camera="angled" aria-label="四季斜視">斜視</button><button class="camera-button" data-sun-camera="top" aria-label="四季俯視">俯視</button><button class="camera-button" data-sun-camera="earth" aria-label="地球晝夜特寫">地球特寫</button></div>
+    <div class="sun-view-cameras"><button class="camera-button" data-sun-camera="free" aria-label="自由公轉視角" title="拖曳旋轉・滾輪縮放・右鍵或雙指平移">自由</button><button class="camera-button" data-sun-camera="top" aria-label="四季俯視">俯視</button><button class="camera-button" data-sun-camera="earth" aria-label="地球晝夜特寫">地球特寫</button></div>
     <output class="sun-view-readout"></output>
   </section>`
   const viewElements = Array.from(overlay.querySelectorAll<HTMLElement>('.sun-view'))
@@ -106,7 +106,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
       root: seasons,
       trackingCameraIds: ['earth'],
       cameras: [
-        { id: 'angled', label: '四季斜視', position: new THREE.Vector3(0, 8.5, 5.5), target: new THREE.Vector3(0, 0, 0) },
+        { id: 'free', label: '自由公轉視角', position: new THREE.Vector3(0, 8.5, 5.5), target: new THREE.Vector3(0, 0, 0) },
         { id: 'top', label: '四季俯視', position: new THREE.Vector3(0, 11, .01), target: new THREE.Vector3(0, 0, 0) },
         earthCamera
       ]

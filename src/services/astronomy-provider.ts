@@ -19,6 +19,7 @@ import {
   Rotation_EQJ_HOR,
   SearchAltitude,
   SearchGlobalSolarEclipse,
+  SearchHourAngle,
   SearchLocalSolarEclipse,
   SearchLunarEclipse,
   SearchRiseSet,
@@ -102,7 +103,7 @@ export interface AstronomyProvider {
   moonPhaseAngle(instant: Date): number
   moonIlluminationFraction(instant: Date): number
   moonEclipticLatitude(instant: Date): number
-  riseSet(body: 'Sun' | 'Moon', instant: Date, observer: ObserverLocation): { readonly rise: Date | null; readonly set: Date | null }
+  riseSet(body: 'Sun' | 'Moon', instant: Date, observer: ObserverLocation): { readonly rise: Date | null; readonly transit: Date; readonly set: Date | null }
   localSiderealDegrees(instant: Date, longitude: number): number
   nextLunarEclipse(after: Date, observer?: ObserverLocation): EclipseSummary
   nextSolarEclipse(after: Date, observer?: ObserverLocation): EclipseSummary
@@ -297,6 +298,7 @@ export function createAstronomyProvider(): AstronomyProvider {
       const location = toObserver(observer)
       return {
         rise: SearchRiseSet(BODIES[body], location, 1, instant, 1)?.date ?? null,
+        transit: SearchHourAngle(BODIES[body], location, 0, instant).time.date,
         set: SearchRiseSet(BODIES[body], location, -1, instant, 1)?.date ?? null
       }
     },

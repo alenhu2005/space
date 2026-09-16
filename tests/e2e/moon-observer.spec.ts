@@ -9,20 +9,27 @@ async function skipIfWebGLUnavailable(page: Page): Promise<void> {
   }
 }
 
-test('月面視窗顯示教學觀測位置，時間隨朔望月時間軸同步', async ({ page }) => {
+test('月面視窗固定教學觀測者，並顯示月升、中天與月落', async ({ page }) => {
   const lab = new LabPage(page)
-  await lab.open('?scene=moon-phases&preset=new-moon&t=0&p.observerLatitude=25&p.observerSolarHour=12')
+  await lab.open('?scene=moon-phases&preset=new-moon&t=0&p.observerLatitude=25&p.observerLongitude=121.5&p.observerSolarHour=12')
   await skipIfWebGLUnavailable(page)
-  await expect(page.locator('.observer-location')).toHaveText('觀測者 25.0°N・日下點經線')
+  await expect(page.locator('.observer-location')).toHaveText('觀測者 25.00°N・121.50°E')
   await expect(page.locator('.observer-time')).toHaveText('教學太陽時 12:00')
-  await expect(page.locator('.observer-zone-note')).toContainText('29.53059 日')
+  await expect(page.locator('.observer-event-rise')).toContainText('06:00')
+  await expect(page.locator('.observer-event-transit')).toContainText('12:00')
+  await expect(page.locator('.observer-event-set')).toContainText('18:00')
 
-  await page.getByRole('slider', { name: '時間軸', exact: true }).fill('0.5')
-  await expect(page.locator('.observer-time')).toHaveText('教學太陽時 06:22')
+  await page.getByRole('slider', { name: '時間軸', exact: true }).fill('0.25')
+  await expect(page.locator('.observer-location')).toHaveText('觀測者 25.00°N・121.50°E')
+  await expect(page.locator('.observer-time')).toHaveText('教學太陽時 12:00')
+  await expect(page.locator('.observer-event-rise')).toContainText('12:00')
+  await expect(page.locator('.observer-event-transit')).toContainText('18:00')
+  await expect(page.locator('.observer-event-set')).toContainText('00:00')
 
   await lab.openControls()
   await page.getByLabel('觀測者緯度').fill('-30')
-  await expect(page.locator('.observer-location')).toContainText('30.0°S')
+  await page.getByLabel('觀測者經度').fill('-70')
+  await expect(page.locator('.observer-location')).toHaveText('觀測者 30.00°S・70.00°W')
   await lab.closeControls()
 
   await page.locator('[data-camera="moon"]').click()
@@ -36,6 +43,7 @@ test('月面視窗使用明示民用時區，UTC 與台北相差八小時', asyn
   await expect(page.locator('.observer-location')).toHaveText('觀測者 25.03°N・121.57°E')
   await expect(page.locator('.observer-time')).toContainText('08:15（Asia/Taipei）')
   await expect(page.locator('.observer-zone-note')).toHaveText('時區需自行選擇；不依經度推測民用時區。')
+  await expect(page.locator('.observer-event-transit')).toContainText('/')
 
   await lab.openControls()
   await page.getByLabel('觀測者民用時區').selectOption('1')

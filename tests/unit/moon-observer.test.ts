@@ -1,29 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatObserverCoordinates,
+  formatObserverEventTime,
   formatObserverTime,
   formatSolarHour,
-  formatTeachingObserverLocation,
   observerTimeZone,
   teachingObserverDirection,
-  teachingSolarTime
+  teachingMoonEvents
 } from '../../src/core/moon-observer'
 
 describe('moon observer helpers', () => {
-  it('advances teaching solar time through one synodic month', () => {
-    expect(teachingSolarTime(12, 0)).toBe(12)
-    expect(teachingSolarTime(12, .5)).toBeCloseTo(6.36708, 5)
-    expect(teachingSolarTime(23, 1)).toBeCloseTo(11.73416, 5)
+  it('derives approximate rise, transit, and set times from the phase angle', () => {
+    expect(teachingMoonEvents(0)).toEqual({ rise: 6, transit: 12, set: 18 })
+    expect(teachingMoonEvents(90)).toEqual({ rise: 12, transit: 18, set: 0 })
+    expect(teachingMoonEvents(180)).toEqual({ rise: 18, transit: 0, set: 6 })
+    expect(teachingMoonEvents(270)).toEqual({ rise: 0, transit: 6, set: 12 })
   })
 
-  it('places noon toward the Sun, midnight away, and 18:00 toward +z', () => {
-    expect(teachingObserverDirection(0, 12)).toEqual({ x: -1, y: 0, z: 0 })
+  it('keeps a teaching observer at a fixed latitude and longitude', () => {
     expect(teachingObserverDirection(0, 0)).toEqual({ x: 1, y: 0, z: 0 })
-    const evening = teachingObserverDirection(0, 18)
-    expect(evening.x).toBeCloseTo(0, 12)
-    expect(evening.y).toBe(0)
-    expect(evening.z).toBeCloseTo(1, 12)
-    expect(teachingObserverDirection(90, 12)).toEqual({ x: 0, y: 1, z: 0 })
+    const east = teachingObserverDirection(0, 90)
+    expect(east.x).toBeCloseTo(0, 12)
+    expect(east.y).toBe(0)
+    expect(east.z).toBeCloseTo(1, 12)
+    expect(teachingObserverDirection(90, 121.5)).toEqual({ x: 0, y: 1, z: 0 })
   })
 
   it('formats explicit civil time zones without guessing from longitude', () => {
@@ -33,6 +33,8 @@ describe('moon observer helpers', () => {
     expect(observerTimeZone(999)).toBe('Asia/Taipei')
     expect(formatObserverTime(instant, 'UTC')).toContain('00:15')
     expect(formatObserverTime(instant, 'Asia/Taipei')).toContain('08:15')
+    expect(formatObserverEventTime(instant, 'Asia/Taipei')).toContain('08:15')
+    expect(formatObserverEventTime(null, 'UTC')).toBe('24h 內無事件')
   })
 
   it('formats observer coordinates in both hemispheres', () => {
@@ -40,10 +42,7 @@ describe('moon observer helpers', () => {
     expect(formatObserverCoordinates(-33.8688, -151.2093)).toBe('33.87°S・151.21°W')
   })
 
-  it('labels teaching coordinates relative to the subsolar meridian', () => {
-    expect(formatTeachingObserverLocation(25, 12)).toBe('25.0°N・日下點經線')
-    expect(formatTeachingObserverLocation(-30, 18)).toBe('30.0°S・日下點東 90.0°')
-    expect(formatTeachingObserverLocation(0, 6)).toBe('0.0°N・日下點西 90.0°')
+  it('formats clock hours around midnight', () => {
     expect(formatSolarHour(23.999)).toBe('00:00')
     expect(formatSolarHour(-1)).toBe('23:00')
   })

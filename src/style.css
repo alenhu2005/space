@@ -187,6 +187,10 @@ body.pseudo-fullscreen .control-panel { z-index: 40; }
 .scene-inset .observer-location { color: var(--cyan); }
 .scene-inset .observer-time { color: var(--ink); font-variant-numeric: tabular-nums; }
 .scene-inset .observer-zone-note { font-size: .53rem; }
+.observer-events { display: grid; gap: 3px; margin-top: 7px; padding: 6px; border: 1px solid rgba(85,217,208,.18); border-radius: 6px; background: rgba(3,10,14,.56); }
+.observer-events span { display: flex; justify-content: space-between; gap: 6px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.observer-events b { color: var(--cyan); font-weight: 650; }
+.observer-events time { color: var(--ink); }
 .sun-split .stage-description { display: none; }
 .sun-views { position: absolute; inset: 78px 12px 80px; z-index: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; pointer-events: none; }
 .sun-views.stacked { grid-template-columns: 1fr; grid-template-rows: repeat(2, minmax(0, 1fr)); }
