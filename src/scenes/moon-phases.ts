@@ -6,7 +6,9 @@ import {
   formatObserverEventTime,
   formatObserverTime,
   formatSolarHour,
+  earthTextureSurfaceDirection,
   observerTimeZone,
+  observerClockHour,
   teachingEarthRotation,
   teachingObserverDirection,
   teachingMoonEvents,
@@ -142,13 +144,19 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
       const teachingRotation = teachingEarthRotation(observerLongitude, solarHour)
       const teachingDirection = teachingObserverDirection(parameter(state, context.definition, 'observerLatitude'), observerLongitude)
       const surfaceDirection = state.mode === 'real'
-        ? teachingObserverDirection(state.observer.latitude, state.observer.longitude)
+        ? earthTextureSurfaceDirection(state.observer.latitude, state.observer.longitude)
         : teachingDirection
       const earthOrientation = state.mode === 'real'
         ? realEarthOrientation(instant, physicalSun!)
         : new THREE.Quaternion().setFromAxisAngle(earthAxis, teachingRotation)
       earth.quaternion.copy(earthOrientation)
       const observerDirection = new THREE.Vector3(surfaceDirection.x, surfaceDirection.y, surfaceDirection.z).applyQuaternion(earthOrientation).normalize()
+      const physicalObserverDirection = state.mode === 'real'
+        ? sunAlignedVector(context.astronomy.observerVector(instant, state.observer), physicalSun!).normalize()
+        : undefined
+      const realSunPosition = state.mode === 'real'
+        ? context.astronomy.horizontalPosition('Sun', instant, state.observer)
+        : undefined
       const markerRadius = trueScale ? .0065 : .065
       observerMarker.scale.setScalar(markerRadius / .065)
       observerMarker.position.copy(observerDirection).multiplyScalar(earthRadius + markerRadius * .55)
@@ -166,6 +174,10 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
         transitTime.textContent = schedule.transit
         setTime.textContent = schedule.set
         observerZoneNote.textContent = '時區需自行選擇；不依經度推測民用時區。'
+        // Astronomy Engine uses a geodetic ellipsoid while the rendered Earth is spherical.
+        phaseDisc.element.dataset.observerTextureAlignment = String(observerDirection.angleTo(physicalObserverDirection!) < degreesToRadians(.3))
+        phaseDisc.element.dataset.observerLocalHour = String(Number(observerClockHour(instant, zone).toFixed(4)))
+        phaseDisc.element.dataset.observerSunAltitude = realSunPosition!.altitude.toFixed(2)
       } else {
         const latitude = parameter(state, context.definition, 'observerLatitude')
         const schedule = teachingMoonEvents(phaseAngle)
@@ -175,6 +187,9 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
         transitTime.textContent = formatSolarHour(schedule.transit)
         setTime.textContent = formatSolarHour(schedule.set)
         observerZoneNote.textContent = '固定經緯度；標記隨地球自轉，時間軸同步推進所在地太陽時。'
+        delete phaseDisc.element.dataset.observerTextureAlignment
+        delete phaseDisc.element.dataset.observerSunAltitude
+        phaseDisc.element.dataset.observerLocalHour = String(Number(solarHour.toFixed(4)))
       }
       const illumination = state.mode === 'real' ? context.astronomy.moonIlluminationFraction(new Date(state.instant)) : moonPhaseFromAngle(phaseAngle).illumination
       const discPhase = Math.acos(1 - 2 * illumination) * 180 / Math.PI
@@ -196,7 +211,8 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
           ? [
               { label: '下一次月升（選定時區）', value: physicalSchedule!.rise },
               { label: '下一次月球中天', value: physicalSchedule!.transit },
-              { label: '下一次月落', value: physicalSchedule!.set }
+              { label: '下一次月落', value: physicalSchedule!.set },
+              { label: '所在地太陽高度', value: `${realSunPosition!.altitude.toFixed(1)}° · ${realSunPosition!.altitude < -6 ? '夜間' : realSunPosition!.altitude < 0 ? '暮光' : '白天'}` }
             ]
           : [
               { label: '約略月升（太陽時）', value: formatSolarHour(schedule.rise) },

@@ -26,7 +26,16 @@ for (const [scene, preset, camera, timeline, comparisonCamera] of scenarios) {
     if (developerScenes.has(scene)) await page.addInitScript(() => sessionStorage.setItem('hu-gege-celestial-lab:developer-unlocked', 'true'))
     const lab = new LabPage(page)
     await lab.open(`?scene=${scene}&mode=teaching&preset=${preset}&time=2025-06-21T04%3A00%3A00.000Z&t=${timeline}`)
-    await page.locator(`[data-camera="${camera}"]`).click()
+    const cameraButton = page.locator(`#camera-toolbar [data-camera="${camera}"]`)
+    if (await cameraButton.isVisible()) await cameraButton.click()
+    else {
+      await lab.openControls()
+      await lab.selectControlTab('顯示')
+      await page.locator(`[data-mobile-camera="${camera}"]`).click()
+      await lab.closeControls()
+    }
+    const sunViewTabs = page.getByRole('tablist', { name: '太陽同步模型' })
+    if (comparisonCamera && await sunViewTabs.isVisible()) await sunViewTabs.getByRole('tab', { name: '公轉模型' }).click()
     if (comparisonCamera) await page.locator(`[data-sun-camera="${comparisonCamera}"]`).click()
     if (comparisonCamera || camera === 'moon' || camera === 'lunar-disc') {
       const surface = comparisonCamera ? page.locator('[data-viewport="comparison"]') : page.locator('#stage-canvas')
@@ -35,19 +44,27 @@ for (const [scene, preset, camera, timeline, comparisonCamera] of scenarios) {
       await page.mouse.wheel(0, -120)
       if (comparisonCamera) {
         await lab.openControls()
+        await lab.selectControlTab('模型')
         await page.getByLabel('公轉角・春分起算').fill('180')
         await lab.closeControls()
       } else await page.locator('#stage-canvas').press('ArrowRight')
     }
-    await expect(page.locator('#metrics .metric').first()).toBeVisible()
+    if (scene === 'sun-path' && await sunViewTabs.isVisible()) await expect(page.locator('.sun-view:visible .sun-view-readout').first()).toBeVisible()
+    else await expect(page.locator('#metrics .metric').first()).toBeVisible()
     if (scene === 'moon-phases') {
-      await expect(page.getByText('地面所見月面', { exact: true })).toBeVisible()
-      const inset = await page.locator('.scene-inset').boundingBox()
-      const viewport = page.viewportSize()!
-      expect(inset).not.toBeNull()
-      expect(inset!.x).toBeGreaterThanOrEqual(0)
-      expect(inset!.x + inset!.width).toBeLessThanOrEqual(viewport.width)
-      expect(inset!.y + inset!.height).toBeLessThan(viewport.height)
+      const infoToggle = page.locator('.inset-toggle')
+      if (await infoToggle.isVisible()) await expect(page.locator('.scene-inset')).toBeHidden()
+      else {
+        await expect(page.locator('.scene-inset')).toBeVisible()
+        await expect(page.locator('.scene-inset strong')).toBeVisible()
+        await expect(page.locator('.scene-inset .observer-events')).toBeVisible()
+        const inset = await page.locator('.scene-inset').boundingBox()
+        const viewport = page.viewportSize()!
+        expect(inset).not.toBeNull()
+        expect(inset!.x).toBeGreaterThanOrEqual(0)
+        expect(inset!.x + inset!.width).toBeLessThanOrEqual(viewport.width)
+        expect(inset!.y + inset!.height).toBeLessThan(viewport.height)
+      }
     }
     await page.evaluate(() => document.fonts.ready)
     expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false)
@@ -56,6 +73,7 @@ for (const [scene, preset, camera, timeline, comparisonCamera] of scenarios) {
     const controlPanel = page.locator('#control-panel')
     await expect(controlPanel).toHaveCSS('transform', /matrix\(1, 0, 0, 1, 0, 0\)|none/)
     await controlPanel.evaluate((panel) => { panel.scrollTop = 0 })
+    await lab.selectControlTab('資訊')
     await expect(page.locator('#detail-metrics')).not.toBeEmpty()
     await expect(page.getByText('教學提示與課綱對應', { exact: true })).toBeVisible()
     await expect(page).toHaveScreenshot(`${snapshotName}-controls.png`, { animations: 'disabled', maxDiffPixelRatio: .025 })

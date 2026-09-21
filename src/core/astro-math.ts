@@ -30,6 +30,16 @@ export function normalizeDegrees(degrees: number): number {
   return ((degrees % 360) + 360) % 360
 }
 
+/** Eastward spin around the north-pole axis; positive is counterclockwise from above the north pole. */
+export function earthEastwardRotationRadians(cycles: number): number {
+  return cycles * TAU
+}
+
+/** Places a surface observer relative to the subsolar meridian using the same eastward convention. */
+export function observerLongitudeRadians(subsolarLongitude: number, hourAngleDegrees: number): number {
+  return subsolarLongitude - degreesToRadians(hourAngleDegrees)
+}
+
 export function horizontalCoordinates(
   hourAngleDegrees: number,
   declinationDegrees: number,

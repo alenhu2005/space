@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  earthTextureSurfaceDirection,
   formatObserverCoordinates,
   formatObserverEventTime,
   formatObserverTime,
   formatSolarHour,
   observerTimeZone,
+  observerClockHour,
   teachingEarthRotation,
   teachingObserverDirection,
   teachingMoonEvents,
@@ -24,16 +26,17 @@ describe('moon observer helpers', () => {
     const east = teachingObserverDirection(0, 90)
     expect(east.x).toBeCloseTo(0, 12)
     expect(east.y).toBe(0)
-    expect(east.z).toBeCloseTo(1, 12)
+    expect(east.z).toBeCloseTo(-1, 12)
     expect(teachingObserverDirection(90, 121.5)).toEqual({ x: 0, y: 1, z: 0 })
+    expect(teachingObserverDirection(-30, -70)).toEqual(earthTextureSurfaceDirection(-30, -70))
   })
 
   it('advances local solar time while rotating the fixed longitude with Earth', () => {
     expect(teachingSolarTime(12, 0)).toBe(12)
     expect(teachingSolarTime(12, .25)).toBeCloseTo(21.18354, 5)
     expect(teachingSolarTime(12, .5)).toBeCloseTo(6.36708, 5)
-    expect(teachingEarthRotation(121.5, 12)).toBeCloseTo(-58.5 * Math.PI / 180, 12)
-    expect(teachingEarthRotation(121.5, 18)).toBeCloseTo(31.5 * Math.PI / 180, 12)
+    expect(teachingEarthRotation(121.5, 12)).toBeCloseTo(-301.5 * Math.PI / 180, 12)
+    expect(teachingEarthRotation(121.5, 18)).toBeCloseTo(-211.5 * Math.PI / 180, 12)
   })
 
   it('formats explicit civil time zones without guessing from longitude', () => {
@@ -45,6 +48,8 @@ describe('moon observer helpers', () => {
     expect(formatObserverTime(instant, 'Asia/Taipei')).toContain('08:15')
     expect(formatObserverEventTime(instant, 'Asia/Taipei')).toContain('08:15')
     expect(formatObserverEventTime(null, 'UTC')).toBe('24h 內無事件')
+    expect(observerClockHour(instant, 'UTC')).toBeCloseTo(.25, 8)
+    expect(observerClockHour(instant, 'Asia/Taipei')).toBeCloseTo(8.25, 8)
   })
 
   it('formats observer coordinates in both hemispheres', () => {

@@ -33,8 +33,17 @@ test('月面視窗將觀測者固定於地表並隨地球自轉更新時間', as
   await expect(page.locator('.observer-location')).toHaveText('觀測者 30.00°S・70.00°W')
   await lab.closeControls()
 
-  await page.locator('[data-camera="moon"]').click()
-  await expect(page.locator('[data-camera="moon"]')).toHaveAttribute('aria-pressed', 'true')
+  const moonCamera = page.locator('#camera-toolbar [data-camera="moon"]')
+  if (await moonCamera.isVisible()) {
+    await moonCamera.click()
+    await expect(moonCamera).toHaveAttribute('aria-pressed', 'true')
+  } else {
+    await lab.openControls()
+    await lab.selectControlTab('顯示')
+    const mobileMoonCamera = page.locator('[data-mobile-camera="moon"]')
+    await mobileMoonCamera.click()
+    await expect(mobileMoonCamera).toHaveAttribute('aria-pressed', 'true')
+  }
 })
 
 test('月面視窗使用明示民用時區，UTC 與台北相差八小時', async ({ page }) => {
@@ -45,10 +54,25 @@ test('月面視窗使用明示民用時區，UTC 與台北相差八小時', asyn
   await expect(page.locator('.observer-time')).toContainText('08:15（Asia/Taipei）')
   await expect(page.locator('.observer-zone-note')).toHaveText('時區需自行選擇；不依經度推測民用時區。')
   await expect(page.locator('.observer-event-transit')).toContainText('/')
+  await expect(page.locator('.scene-inset')).toHaveAttribute('data-observer-texture-alignment', 'true')
+  await expect(page.locator('.scene-inset')).toHaveAttribute('data-observer-local-hour', '8.25')
 
   await lab.openControls()
   await page.getByLabel('觀測者民用時區').selectOption('1')
   await expect(page.locator('.observer-time')).toContainText('00:15（UTC）')
+})
+
+test('真實模式的台灣觀測者在晚上十點位於地球夜側與正確貼圖位置', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open('?scene=moon-phases&mode=real&time=2026-09-20T14%3A53%3A00Z&lat=24.7733&lon=120.96418')
+  await skipIfWebGLUnavailable(page)
+  const inset = page.locator('.scene-inset')
+  await expect(inset).toHaveAttribute('data-observer-texture-alignment', 'true')
+  await expect(inset).toHaveAttribute('data-observer-local-hour', '22.8833')
+  await expect(page.locator('.observer-time')).toContainText('22:53（Asia/Taipei）')
+  await expect(page.locator('#metrics')).toContainText('所在地太陽高度')
+  await expect(page.locator('#metrics')).toContainText('夜間')
+  expect(Number(await inset.getAttribute('data-observer-sun-altitude'))).toBeLessThan(-30)
 })
 
 test('月相切換教學與真實模式時保留月相，真實播放會推進所在地時間', async ({ page }) => {

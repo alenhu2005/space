@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   dayLengthHours,
+  earthEastwardRotationRadians,
   horizontalCoordinates,
   keplerPosition,
   keplerVelocity,
   moonPhaseFromAngle,
   normalizeDegrees,
   orbitalPeriodYears,
+  observerLongitudeRadians,
   tidalAlignmentFactor
 } from '../../src/core/astro-math'
 
@@ -30,6 +32,11 @@ describe('astronomy teaching math', () => {
     expect(dayLengthHours(23.5, 0)).toBeCloseTo(12, 8)
     expect(dayLengthHours(75, 23.44)).toBe(24)
     expect(dayLengthHours(75, -23.44)).toBe(0)
+  })
+
+  it('rotates Earth eastward and the observer counterclockwise from above the north pole', () => {
+    expect(earthEastwardRotationRadians(.25)).toBeCloseTo(Math.PI / 2, 8)
+    expect(observerLongitudeRadians(0, 90)).toBeCloseTo(-Math.PI / 2, 8)
   })
 
   it.each([

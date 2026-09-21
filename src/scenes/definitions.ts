@@ -28,7 +28,13 @@ const definitions: readonly SceneDefinition[] = [
     description: '調整緯度與日期，觀察太陽高度、日照角度和晝長如何一起改變。',
     grades: '國中九年級・高中必修',
     curriculumCodes: ['Id-IV-1', 'Id-IV-2', 'Id-IV-3', 'EId-Vc-1'],
-    focus: ['地軸傾斜造成四季', '夏季太陽路徑較高且晝長較長', '日照角度影響單位面積接收的能量'],
+    focus: [
+      '地軸傾斜造成四季',
+      '夏季太陽路徑較高且晝長較長',
+      '正午高度通式：h = 90° − |觀測緯度 φ − 太陽赤緯 δ|',
+      '北半球中高緯：夏至 δ = +23.4°、春秋分 δ = 0°、冬至 δ = −23.4°',
+      '日照角度影響單位面積接收的能量'
+    ],
     misconception: '四季的主因不是地球離太陽遠近，而是地軸傾斜造成的日照角度與晝長差異。',
     controls: [
       { key: 'latitude', label: '觀察緯度', min: -90, max: 90, step: .1, unit: '°' },

@@ -19,18 +19,23 @@ function clean(value: number): number {
 }
 
 /**
- * Fixed surface direction in scene coordinates. Longitude 0 is +x and
- * longitude 90 degrees east is +z.
+ * Fixed direction on the equirectangular Earth texture. Longitude 0 is +x;
+ * because Three.js SphereGeometry runs its U coordinate toward +z westward,
+ * longitude 90 degrees east is -z.
  */
-export function teachingObserverDirection(latitude: number, longitude: number): { readonly x: number; readonly y: number; readonly z: number } {
+export function earthTextureSurfaceDirection(latitude: number, longitude: number): { readonly x: number; readonly y: number; readonly z: number } {
   const latitudeRadians = Math.max(-90, Math.min(90, latitude)) * Math.PI / 180
   const longitudeRadians = modulo(longitude, 360) * Math.PI / 180
   const horizontal = Math.cos(latitudeRadians)
   return {
     x: clean(horizontal * Math.cos(longitudeRadians)),
     y: clean(Math.sin(latitudeRadians)),
-    z: clean(horizontal * Math.sin(longitudeRadians))
+    z: clean(-horizontal * Math.sin(longitudeRadians))
   }
+}
+
+export function teachingObserverDirection(latitude: number, longitude: number): { readonly x: number; readonly y: number; readonly z: number } {
+  return earthTextureSurfaceDirection(latitude, longitude)
 }
 
 /** Local apparent solar time as the phase timeline advances through one synodic month. */
@@ -45,7 +50,7 @@ export function teachingSolarTime(initialHour: number, timeline: number): number
 export function teachingEarthRotation(longitude: number, solarHour: number): number {
   const longitudeRadians = modulo(longitude, 360) * Math.PI / 180
   const hourAngle = (modulo(solarHour, 24) - 12) * Math.PI / 12
-  return longitudeRadians - Math.PI + hourAngle
+  return -longitudeRadians - Math.PI + hourAngle
 }
 
 export function teachingMoonEvents(phaseAngle: number): { readonly rise: number; readonly transit: number; readonly set: number } {
@@ -65,6 +70,14 @@ export function formatObserverTime(instant: Date, timeZone: string): string {
   }).formatToParts(instant)
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
   return `${value('year')}/${value('month')}/${value('day')} ${value('hour')}:${value('minute')}`
+}
+
+export function observerClockHour(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(instant)
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0)
+  return value('hour') + value('minute') / 60 + value('second') / 3600
 }
 
 export function formatObserverEventTime(instant: Date | null, timeZone: string): string {

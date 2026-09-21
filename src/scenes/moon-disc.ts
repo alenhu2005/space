@@ -15,6 +15,7 @@ export function createPhaseDisc(textureUrl: string, onTextureReady?: () => void)
   const context = canvas.getContext('2d', { alpha: true })
   const element = document.createElement('div')
   element.className = 'scene-inset'
+  element.id = 'scene-inset-overlay'
   element.innerHTML = '<p>地面所見月面</p><strong></strong><span class="phase-illumination"></span><br><span class="phase-convention">北向上示意・非視直徑</span>'
   element.prepend(canvas)
   const name = element.querySelector('strong')!

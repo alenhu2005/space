@@ -13,13 +13,6 @@ if (!app) throw new Error('找不到應用程式掛載點。')
 app.innerHTML = `
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <div class="brand-copy">
-          <h1 class="brand-title">胡哥哥天體運動 3D 實驗室</h1>
-          <div class="brand-subtitle">Celestial Motion Lab</div>
-        </div>
-      </div>
       <div class="topbar-actions">
         <div class="mode-switch" aria-label="模擬模式">
           <button class="mode-button" data-mode="teaching">教學</button>
@@ -37,7 +30,7 @@ app.innerHTML = `
         <div class="nav-header"><p class="nav-heading">實驗場景</p><button class="icon-button nav-toggle" data-action="toggle-nav" aria-label="收合實驗場景" aria-expanded="true" aria-controls="scene-list developer-tools" title="收合實驗場景">‹</button></div>
         <div class="scene-list" id="scene-list"></div>
         <details class="developer-tools" id="developer-tools">
-          <summary><span>開發者功能</span><span class="developer-lock-state" id="developer-lock-state">🔒</span></summary>
+          <summary aria-label="開發者功能" title="開發者功能"><span>開發者功能</span><span class="developer-lock-state" id="developer-lock-state">🔒</span></summary>
           <div class="developer-content" id="developer-content"></div>
         </details>
       </nav>
@@ -50,6 +43,7 @@ app.innerHTML = `
           <p class="stage-description" id="stage-description"></p>
         </div>
         <div class="scale-badge" id="scale-badge">教學示意・非等比例</div>
+        <button class="inset-toggle" data-action="toggle-inset" aria-controls="scene-inset-overlay" aria-expanded="false" hidden>觀測資訊</button>
         <div class="camera-toolbar" id="camera-toolbar" aria-label="相機視角"></div>
         <div class="metrics" id="metrics" aria-label="觀測數據"></div>
         <button class="fullscreen-exit ghost-button" data-action="fullscreen" aria-label="退出展開模型">返回實驗室</button>
@@ -58,6 +52,7 @@ app.innerHTML = `
         </div>
       </section>
 
+      <button class="drawer-backdrop" data-action="close-panel" aria-label="返回模型" hidden></button>
       <aside class="control-panel" id="control-panel" aria-label="場景控制面板">
         <div class="control-panel-header">
           <p class="section-kicker">觀測控制</p>
@@ -66,6 +61,8 @@ app.innerHTML = `
         <div id="control-content"></div>
       </aside>
     </main>
+
+    <section class="sun-quick-controls mobile-sun-controls" id="mobile-sun-controls" aria-label="太陽模型快速調整" hidden></section>
 
     <footer class="transport" aria-label="時間控制">
       <div class="transport-buttons">
@@ -84,7 +81,7 @@ app.innerHTML = `
           <option value="0.25">0.25×</option><option value="1">1×</option><option value="4">4×</option>
           <option value="16">16×</option><option value="64">64×</option>
         </select>
-        <button class="panel-toggle" data-action="open-panel" aria-expanded="false">調整模型</button>
+        <button class="panel-toggle" data-action="open-panel" aria-label="調整模型" aria-expanded="false">控制</button>
       </div>
     </footer>
   </div>
@@ -115,6 +112,7 @@ let statusTimer = 0
 let urlTimer = 0
 let lastUrlWrite = -Infinity
 let latestMetrics: readonly SceneMetric[] = []
+let mobileControlTab: 'model' | 'display' | 'info' = 'model'
 let selectedEclipse: { readonly kind: 'solar' | 'lunar'; readonly result: EclipseSummary; readonly observerKey: string } | undefined
 
 function readDeveloperUnlock(): boolean {
@@ -141,27 +139,62 @@ cameras = stage.setScene(SCENE_BY_ID[state.sceneId])
 stage.setState(state)
 renderAll()
 const drawerMedia = window.matchMedia('(max-width: 900px)')
+const phoneMedia = window.matchMedia('(max-width: 560px)')
 function updateSceneNav(): void {
   const collapsed = document.body.classList.contains('nav-collapsed')
+  const effectivelyCollapsed = collapsed && !phoneMedia.matches
   const toggle = document.querySelector<HTMLButtonElement>('.nav-toggle')!
   const label = collapsed ? '展開實驗場景' : '收合實驗場景'
   toggle.setAttribute('aria-label', label)
   toggle.setAttribute('aria-expanded', String(!collapsed))
   toggle.title = label
   toggle.textContent = collapsed ? '☰' : '‹'
-  document.querySelector<HTMLElement>('#scene-list')!.inert = collapsed && drawerMedia.matches
-  document.querySelector<HTMLElement>('#developer-tools')!.inert = collapsed
+  document.querySelector<HTMLElement>('#scene-list')!.inert = effectivelyCollapsed && drawerMedia.matches
+  document.querySelector<HTMLElement>('#developer-tools')!.inert = effectivelyCollapsed
 }
 try { document.body.classList.toggle('nav-collapsed', sessionStorage.getItem('hu-gege-celestial-lab:nav-collapsed') === 'true') } catch { /* Storage may be disabled; keep the menu expanded. */ }
 drawerMedia.addEventListener('change', updateSceneNav)
+phoneMedia.addEventListener('change', updateSceneNav)
 updateSceneNav()
 function updateDrawerAccessibility(): void {
   const panel = document.querySelector<HTMLElement>('#control-panel')!
-  panel.inert = drawerMedia.matches && !document.body.classList.contains('panel-open')
-  document.querySelector('[data-action="open-panel"]')?.setAttribute('aria-expanded', String(!panel.inert && drawerMedia.matches))
+  const open = drawerMedia.matches && document.body.classList.contains('panel-open')
+  panel.inert = drawerMedia.matches && !open
+  if (drawerMedia.matches && open) {
+    panel.setAttribute('role', 'dialog')
+    panel.setAttribute('aria-modal', 'true')
+  } else {
+    panel.removeAttribute('role')
+    panel.removeAttribute('aria-modal')
+  }
+  for (const selector of ['.topbar', '.scene-nav', '#stage-wrap', '.transport']) {
+    const element = document.querySelector<HTMLElement>(selector)
+    if (element) element.inert = open
+  }
+  const backdrop = document.querySelector<HTMLButtonElement>('.drawer-backdrop')!
+  backdrop.hidden = !open
+  document.querySelector('[data-action="open-panel"]')?.setAttribute('aria-expanded', String(open))
 }
 drawerMedia.addEventListener('change', updateDrawerAccessibility)
 updateDrawerAccessibility()
+
+function updateInsetToggle(reset = false): void {
+  const toggle = document.querySelector<HTMLButtonElement>('.inset-toggle')!
+  const hasInset = Boolean(stageWrap.querySelector('.scene-inset'))
+  if (reset || !hasInset) stageWrap.classList.remove('inset-open')
+  const open = hasInset && stageWrap.classList.contains('inset-open')
+  toggle.hidden = !hasInset
+  toggle.setAttribute('aria-expanded', String(open))
+  toggle.textContent = open ? '收起資訊' : '觀測資訊'
+}
+
+function updateControlTabs(): void {
+  const panel = document.querySelector<HTMLElement>('#control-panel')!
+  panel.dataset.controlTab = mobileControlTab
+  panel.querySelectorAll<HTMLButtonElement>('[data-control-tab]').forEach((button) => {
+    button.setAttribute('aria-selected', String(button.dataset.controlTab === mobileControlTab))
+  })
+}
 
 function setDrawerOpen(open: boolean): void {
   document.body.classList.toggle('panel-open', open)
@@ -263,6 +296,7 @@ function selectScene(sceneId: SceneId): void {
     return
   }
   const definition = SCENE_BY_ID[sceneId]
+  mobileControlTab = 'model'
   state = simulationReducer(state, { type: 'set-scene', sceneId })
   selectedEclipse = undefined
   const preset = definition.presets[0]
@@ -277,6 +311,7 @@ function selectScene(sceneId: SceneId): void {
     state = simulationReducer(state, { type: 'set-timeline', timeline: timelineFor(preset.parameters, .25) })
   }
   cameras = stage.setScene(definition)
+  stageWrap.classList.remove('inset-open')
   latestMetrics = []
   stage.setState(state)
   renderAll()
@@ -349,6 +384,7 @@ function renderAll(): void {
   const focusData = active?.closest('button')?.dataset
   const noteOpen = document.querySelector<HTMLDetailsElement>('.lesson-note')?.open ?? true
   const definition = SCENE_BY_ID[state.sceneId]
+  document.body.classList.toggle('moon-observer-visible', state.sceneId === 'moon-phases')
   renderSceneNav()
   document.querySelector('#stage-eyebrow')!.textContent = definition.eyebrow
   document.querySelector('#stage-title')!.textContent = definition.title
@@ -357,7 +393,9 @@ function renderAll(): void {
   renderTopbar()
   renderCameras()
   renderControls()
+  renderMobileSunControls()
   renderTransport()
+  updateInsetToggle()
   const note = document.querySelector<HTMLDetailsElement>('.lesson-note')
   if (note) note.open = noteOpen
   if (active && !active.isConnected) {
@@ -400,7 +438,7 @@ function renderTopbar(): void {
 function renderCameras(): void {
   document.querySelector('#camera-toolbar')!.innerHTML = cameras.map((camera) => `
     <button class="camera-button" data-camera="${camera.id}" aria-pressed="${camera.id === state.cameraPreset}">${camera.label}</button>`).join('')
-    + (state.sceneId === 'sun-path' ? `<a class="camera-button" id="legacy-sun-link" href="${import.meta.env.BASE_URL}legacy-sun.html" aria-label="切換舊版太陽教材">切換舊版</a>` : '')
+    + (state.sceneId === 'sun-path' ? `<a class="camera-button" id="legacy-sun-link" data-legacy-sun-link href="${import.meta.env.BASE_URL}legacy-sun.html" aria-label="切換舊版太陽教材">切換舊版</a>` : '')
 }
 
 function renderControls(): void {
@@ -423,34 +461,77 @@ function renderControls(): void {
   // would reorder/remove DOM controls mid-interaction and break keyboard and
   // assistive-technology navigation.
   const sliderHtml = state.mode === 'teaching' ? definition.controls.filter((control) => !control.onlyInReal).map(renderParameter).join('') : realControls() + definition.controls.filter((control) => control.availableInReal).map(renderParameter).join('')
-  const seasonActions = state.sceneId === 'sun-path' && state.mode === 'real' ? `<section class="control-section"><p class="section-kicker">${new Date(state.instant).getUTCFullYear()} 年分至點</p><div class="action-row">${[['marchEquinox', '春分'], ['juneSolstice', '夏至'], ['septemberEquinox', '秋分'], ['decemberSolstice', '冬至']].map(([key, name]) => `<button class="ghost-button" data-season="${key}">${name}</button>`).join('')}</div></section>` : ''
+  const seasonActions = state.sceneId === 'sun-path' && state.mode === 'real' ? `<section class="control-section" data-control-group="model"><p class="section-kicker">${new Date(state.instant).getUTCFullYear()} 年分至點</p><div class="action-row">${[['marchEquinox', '春分'], ['juneSolstice', '夏至'], ['septemberEquinox', '秋分'], ['decemberSolstice', '冬至']].map(([key, name]) => `<button class="ghost-button" data-season="${key}">${name}</button>`).join('')}</div></section>` : ''
 
   const eclipseActions = state.sceneId === 'eclipses' && state.mode === 'real' ? `
-    <div class="control-section"><p class="section-kicker">下一次食象</p>
+    <div class="control-section" data-control-group="model"><p class="section-kicker">下一次食象</p>
       <div class="action-row"><button class="ghost-button" data-action="next-solar">全球日食</button><button class="ghost-button" data-action="next-lunar">月食</button><button class="ghost-button" data-action="next-local-solar">所在地日食</button></div>
       <p class="inline-status" id="eclipse-status" role="status">${eclipseStatus()}</p>
     </div>` : ''
 
   document.querySelector('#control-content')!.innerHTML = `
-    <section class="control-section"><p class="section-kicker">快速情境${state.mode === 'real' ? '・選取後進入教學模式' : ''}</p><div class="preset-grid">${presetHtml}</div></section>
-    <section class="control-section"><p class="section-kicker">${state.mode === 'real' ? '日期與觀察位置' : '模型參數'}</p>${sliderHtml}</section>
+    <div class="control-tabs mobile-only" role="tablist" aria-label="控制分類">
+      <button role="tab" data-control-tab="model">模型</button>
+      <button role="tab" data-control-tab="display">顯示</button>
+      <button role="tab" data-control-tab="info">資訊</button>
+    </div>
+    <section class="control-section preset-section" data-control-group="model"><p class="section-kicker">快速情境${state.mode === 'real' ? '・選取後進入教學模式' : ''}</p><div class="preset-grid">${presetHtml}</div></section>
+    <section class="control-section parameter-section" data-control-group="model"><p class="section-kicker">${state.mode === 'real' ? '日期與觀察位置' : '模型參數'}</p>${sliderHtml}</section>
     ${eclipseActions}
     ${seasonActions}
-    <section class="control-section"><p class="section-kicker">顯示圖層</p><div class="layer-list">
+    <section class="control-section" data-control-group="display"><p class="section-kicker">顯示圖層</p><div class="layer-list">
       ${(['labels', 'paths', 'shadows'] as const).map((layer) => `<button class="layer-toggle" data-layer="${layer}" aria-pressed="${state.layers[layer]}">${layer === 'labels' ? '標籤' : layer === 'paths' ? '軌跡' : '光影'}</button>`).join('')}
     </div></section>
-    <section class="control-section mobile-only"><p class="section-kicker">課堂連結</p><button class="ghost-button" data-action="share">複製目前場景連結</button></section>
-    <section class="control-section drawer-transport"><p class="section-kicker">時間操作</p>
+    <section class="control-section mobile-only" data-control-group="display"><p class="section-kicker">相機視角</p><div class="action-row">${cameras.map((camera) => `<button class="ghost-button" data-mobile-camera="${camera.id}" aria-pressed="${camera.id === state.cameraPreset}">${camera.label}</button>`).join('')}</div></section>
+    ${state.sceneId === 'sun-path' ? `<section class="control-section mobile-only" data-control-group="display"><a class="ghost-button mobile-legacy-link" data-legacy-sun-link href="${import.meta.env.BASE_URL}legacy-sun.html" aria-label="切換舊版太陽教材">切換舊版太陽教材</a></section>` : ''}
+    <section class="control-section mobile-only" data-control-group="display"><p class="section-kicker">課堂連結</p><button class="ghost-button" data-action="share">複製目前場景連結</button></section>
+    <section class="control-section drawer-transport" data-control-group="display"><p class="section-kicker">時間操作</p>
       <div class="action-row"><button class="ghost-button" data-action="step">向前一步</button><button class="ghost-button" data-action="reset">重設場景</button>
       <label class="field-label">播放倍率<select class="speed-select" id="drawer-speed"><option value="0.25">0.25×</option><option value="1">1×</option><option value="4">4×</option><option value="16">16×</option><option value="64">64×</option></select></label></div>
     </section>
-    <section class="control-section"><p class="section-kicker">完整觀測數據</p><div id="detail-metrics"></div></section>
-    <section class="control-section"><details class="lesson-note" open><summary>教學提示與課綱對應</summary>
+    <section class="control-section" data-control-group="info"><p class="section-kicker">完整觀測數據</p><div id="detail-metrics"></div></section>
+    <section class="control-section mobile-only" data-control-group="info"><button class="ghost-button" data-action="about">資料與使用說明</button></section>
+    <section class="control-section" data-control-group="info"><details class="lesson-note" open><summary>教學提示與課綱對應</summary>
       <ul>${definition.focus.map((item) => `<li>${item}</li>`).join('')}</ul>
       <div class="misconception"><strong>常見迷思：</strong>${definition.misconception}</div>
       <div class="curriculum"><span class="code-tag">${definition.grades}</span>${definition.curriculumCodes.map((code) => `<span class="code-tag">${code}</span>`).join('')}</div>
     </details></section>`
+  updateControlTabs()
   renderMetrics(latestMetrics)
+}
+
+function renderMobileSunControls(): void {
+  const controls = document.querySelector<HTMLElement>('#mobile-sun-controls')!
+  const visible = state.sceneId === 'sun-path'
+  controls.hidden = !visible
+  document.body.classList.toggle('sun-quick-visible', visible)
+  if (!visible) {
+    controls.replaceChildren()
+    return
+  }
+
+  const seasonAngle = state.parameters.seasonAngle ?? SCENE_BY_ID['sun-path'].defaultParameters.seasonAngle ?? 0
+  const seasonNames = ['春分', '夏至', '秋分', '冬至']
+  const seasonIndex = Math.round(seasonAngle / 90) % 4
+  const seasonLabel = Math.abs(seasonAngle % 90) < .5 ? seasonNames[seasonIndex] : `${seasonAngle.toFixed(0)}°`
+  const speedOptions = [.25, 1, 4, 16, 64].map((speed) => `<option value="${speed}" ${state.speed === speed ? 'selected' : ''}>${speed}×</option>`).join('')
+
+  controls.innerHTML = state.mode === 'teaching' ? `
+    <div class="sun-quick-grid">
+      <label><span>季節</span><input type="range" min="0" max="360" step="1" value="${seasonAngle}" data-quick-parameter="seasonAngle" aria-label="快速調整季節"><output data-quick-output="seasonAngle">${seasonLabel}</output></label>
+      <label><span>時間</span><input type="range" min="0" max="1" step="0.001" value="${state.timeline}" data-quick-timeline aria-label="快速調整時間"><output data-quick-output="timeline">${timelineLabel()}</output></label>
+      <label><span>緯度</span><input type="range" min="-90" max="90" step=".1" value="${state.parameters.latitude ?? 25.033}" data-quick-parameter="latitude" aria-label="快速調整緯度"><output data-quick-output="latitude">${(state.parameters.latitude ?? 25.033).toFixed(1)}°</output></label>
+      <label><span>速度</span><select id="sun-quick-speed" aria-label="快速調整速度">${speedOptions}</select><output>${state.speed}×</output></label>
+    </div>
+    <div class="sun-quick-latitudes" aria-label="常用緯度">${[90, 66.5, 45, 23.5, 0, -23.5, -45, -66.5, -90].map((latitude) => `<button data-quick-latitude="${latitude}">${latitude > 0 ? `${latitude}°N` : latitude < 0 ? `${Math.abs(latitude)}°S` : '赤道'}</button>`).join('')}</div>
+  ` : `
+    <div class="sun-quick-real-grid">
+      <label><span>日期時間</span><input type="datetime-local" value="${toLocalInputValue(new Date(state.instant))}" data-quick-instant aria-label="快速日期"></label>
+      <label><span>緯度</span><input type="number" min="-90" max="90" step=".0001" value="${state.observer.latitude}" data-quick-observer="latitude" aria-label="快速南北位置"></label>
+      <label><span>經度</span><input type="number" min="-180" max="180" step=".0001" value="${state.observer.longitude}" data-quick-observer="longitude" aria-label="快速東西位置"></label>
+      <label><span>速度</span><select id="sun-quick-speed" aria-label="快速調整速度">${speedOptions}</select></label>
+    </div>
+  `
 }
 
 function realControls(): string {
@@ -479,15 +560,24 @@ function renderTransport(): void {
   timeline.setAttribute('aria-valuetext', timelineLabel())
   const instantInput = document.querySelector<HTMLInputElement>('#instant-input')
   if (instantInput && document.activeElement !== instantInput) instantInput.value = toLocalInputValue(new Date(state.instant))
+  const quickInstant = document.querySelector<HTMLInputElement>('[data-quick-instant]')
+  if (quickInstant && document.activeElement !== quickInstant) quickInstant.value = toLocalInputValue(new Date(state.instant))
   document.querySelector<HTMLSelectElement>('#speed')!.value = String(state.speed)
   const drawerSpeed = document.querySelector<HTMLSelectElement>('#drawer-speed')
   if (drawerSpeed) drawerSpeed.value = String(state.speed)
+  const quickTimeline = document.querySelector<HTMLInputElement>('[data-quick-timeline]')
+  if (quickTimeline && document.activeElement !== quickTimeline) quickTimeline.value = String(state.timeline)
+  const quickTimelineOutput = document.querySelector<HTMLOutputElement>('[data-quick-output="timeline"]')
+  if (quickTimelineOutput) quickTimelineOutput.value = timelineLabel()
+  const quickSpeed = document.querySelector<HTMLSelectElement>('#sun-quick-speed')
+  if (quickSpeed) quickSpeed.value = String(state.speed)
   const play = document.querySelector<HTMLButtonElement>('[data-action="play"]')!
   play.textContent = state.playing ? 'Ⅱ' : '▶'
   play.setAttribute('aria-label', state.playing ? '暫停' : '播放')
   document.querySelector('#timeline-readout')!.textContent = timelineLabel()
-  const legacyLink = document.querySelector<HTMLAnchorElement>('#legacy-sun-link')
-  if (legacyLink) legacyLink.search = toUrlSearchParams(state).toString()
+  document.querySelectorAll<HTMLAnchorElement>('[data-legacy-sun-link]').forEach((link) => {
+    link.search = toUrlSearchParams(state).toString()
+  })
 }
 
 function timelineLabel(): string {
@@ -609,12 +699,27 @@ function eclipseStatus(): string {
 app.addEventListener('click', (event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>('button')
   if (!target) return
+  if (target.dataset.controlTab === 'model' || target.dataset.controlTab === 'display' || target.dataset.controlTab === 'info') {
+    mobileControlTab = target.dataset.controlTab
+    updateControlTabs()
+    return
+  }
   const sceneId = target.dataset.scene as SceneId | undefined
   if (sceneId) return selectScene(sceneId)
   if (target.dataset.preset) return applyPreset(target.dataset.preset)
+  if (target.dataset.quickLayer) return dispatch({ type: 'toggle-layer', layer: target.dataset.quickLayer as keyof SimulationState['layers'] })
+  if (target.dataset.quickLatitude) {
+    dispatch({ type: 'set-parameter', key: 'latitude', value: Number(target.dataset.quickLatitude) })
+    return
+  }
   if (target.dataset.camera) {
     dispatch({ type: 'set-camera', cameraPreset: target.dataset.camera })
     stage.focusCamera(target.dataset.camera)
+    return
+  }
+  if (target.dataset.mobileCamera) {
+    dispatch({ type: 'set-camera', cameraPreset: target.dataset.mobileCamera })
+    stage.focusCamera(target.dataset.mobileCamera)
     return
   }
   if (target.dataset.layer) return dispatch({ type: 'toggle-layer', layer: target.dataset.layer as keyof SimulationState['layers'] })
@@ -652,6 +757,12 @@ app.addEventListener('click', (event) => {
     case 'reset': resetScene(); break
     case 'open-panel': setDrawerOpen(true); break
     case 'close-panel': setDrawerOpen(false); break
+    case 'toggle-inset': {
+      stageWrap.classList.toggle('inset-open')
+      updateInsetToggle()
+      stage.resize()
+      break
+    }
     case 'fullscreen': {
       if (document.body.classList.contains('pseudo-fullscreen')) document.body.classList.remove('pseudo-fullscreen')
       else if (document.fullscreenElement) void document.exitFullscreen().catch(() => showTransientStatus('無法退出全螢幕'))
@@ -689,6 +800,20 @@ app.addEventListener('click', (event) => {
 
 app.addEventListener('input', (event) => {
   const input = event.target as HTMLInputElement
+  if (input.dataset.quickTimeline !== undefined) {
+    dispatch({ type: 'set-timeline', timeline: Number(input.value) }, false)
+    const output = document.querySelector<HTMLOutputElement>('[data-quick-output="timeline"]')
+    if (output) output.value = timelineLabel()
+  }
+  if (input.dataset.quickParameter) {
+    const value = Number(input.value)
+    dispatch({ type: 'set-parameter', key: input.dataset.quickParameter, value }, false)
+    document.querySelectorAll('[data-preset]').forEach((button) => button.setAttribute('aria-pressed', 'false'))
+    const output = document.querySelector<HTMLOutputElement>(`[data-quick-output="${input.dataset.quickParameter}"]`)
+    if (output) output.value = input.dataset.quickParameter === 'seasonAngle'
+      ? (Math.abs(value % 90) < .5 ? ['春分', '夏至', '秋分', '冬至'][Math.round(value / 90) % 4]! : `${value.toFixed(0)}°`)
+      : `${value.toFixed(1)}°`
+  }
   if (input.id === 'timeline') {
     const timeline = Number(input.value)
     if (state.mode === 'real') {
@@ -712,9 +837,20 @@ app.addEventListener('input', (event) => {
 app.addEventListener('change', (event) => {
   const input = event.target as HTMLInputElement | HTMLSelectElement
   if (input.dataset.parameter && input.tagName === 'SELECT') dispatch({ type: 'set-parameter', key: input.dataset.parameter, value: Number(input.value) })
-  if (input.id === 'speed' || input.id === 'drawer-speed') dispatch({ type: 'set-speed', speed: Number(input.value) })
+  if (input.id === 'speed' || input.id === 'drawer-speed' || input.id === 'sun-quick-speed') dispatch({ type: 'set-speed', speed: Number(input.value) })
   if (input.dataset.parameter && input.tagName === 'SELECT') dispatch({ type: 'set-parameter', key: input.dataset.parameter, value: Number(input.value) })
   if (input.id === 'instant-input' && input.value && Number.isFinite(Date.parse(input.value)) && input.checkValidity()) { selectedEclipse = undefined; dispatch({ type: 'set-instant', instant: new Date(input.value).toISOString() }) }
+  if (input.dataset.quickInstant !== undefined && input.value && Number.isFinite(Date.parse(input.value)) && input.checkValidity()) {
+    selectedEclipse = undefined
+    dispatch({ type: 'set-instant', instant: new Date(input.value).toISOString() })
+  }
+  if (input.dataset.quickObserver && input.checkValidity()) {
+    const value = Number(input.value)
+    if (Number.isFinite(value)) dispatch({
+      type: 'set-observer',
+      observer: { ...state.observer, [input.dataset.quickObserver]: value }
+    })
+  }
   if (input.id === 'latitude-input' || input.id === 'longitude-input') updateObserverFromInputs()
 })
 
@@ -722,6 +858,18 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'Escape') {
     if (document.body.classList.contains('panel-open')) setDrawerOpen(false)
     document.body.classList.remove('pseudo-fullscreen')
+  }
+  if (event.key === 'Tab' && drawerMedia.matches && document.body.classList.contains('panel-open')) {
+    const panel = document.querySelector<HTMLElement>('#control-panel')!
+    const focusable = Array.from(panel.querySelectorAll<HTMLElement>('button, input, select, summary, a[href]'))
+      .filter((element) => !element.inert && !element.hasAttribute('disabled') && element.getClientRects().length > 0)
+    const first = focusable[0]
+    const last = focusable.at(-1)
+    if (first && last && (event.shiftKey ? document.activeElement === first : document.activeElement === last)) {
+      event.preventDefault()
+      const destination = event.shiftKey ? last : first
+      destination.focus()
+    }
   }
   const tag = (event.target as HTMLElement).tagName
   if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'SUMMARY', 'A'].includes(tag) || document.querySelector<HTMLDialogElement>('#about-dialog')?.open) return

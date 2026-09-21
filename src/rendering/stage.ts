@@ -304,6 +304,12 @@ export function createStage(
     }
     primaryViewport = measure(primarySurface)
     if (comparisonSurface) comparisonViewport = measure(comparisonSurface)
+    const labelScale = width <= 560 ? 1.5 : width <= 900 ? 1.18 : 1
+    for (const label of [...labels, ...comparisonLabels]) {
+      const baseScale = label.userData.baseScale as THREE.Vector3 | undefined ?? label.scale.clone()
+      label.userData.baseScale = baseScale
+      label.scale.set(baseScale.x * labelScale, baseScale.y * labelScale, baseScale.z)
+    }
     for (const [viewCamera, viewport] of [[camera, primaryViewport], [comparisonCamera, comparisonViewport]] as const) {
       viewCamera.aspect = viewport.width / viewport.height
       viewCamera.zoom = viewCamera === comparisonCamera ? Math.min(1.2, viewCamera.aspect / .9) : Math.min(1, viewCamera.aspect / 1.1)
@@ -384,6 +390,14 @@ export function createStage(
         visual.overlay.addEventListener('click', (event) => {
           const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-sun-camera]')
           if (button) selectComparisonCamera(button.dataset.sunCamera!)
+          const viewButton = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-sun-view]')
+          if (viewButton && visual?.overlay) {
+            visual.overlay.dataset.mobileView = viewButton.dataset.sunView
+            visual.overlay.querySelectorAll<HTMLButtonElement>('[data-sun-view]').forEach((candidate) => {
+              candidate.setAttribute('aria-selected', String(candidate === viewButton))
+            })
+            resize()
+          }
         })
         selectComparisonCamera(visual.comparison.cameras[0]!.id)
         resizeObserver.observe(primarySurface)

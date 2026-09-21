@@ -44,6 +44,7 @@ export function createEclipses(context: BuildContext): SceneVisual {
   const moonLabel = addLabel(root, '月球', new THREE.Vector3(), '#eef7f5', .24)
   const overlay = document.createElement('div')
   overlay.className = 'scene-inset'
+  overlay.id = 'scene-inset-overlay'
   const inset = document.createElement('canvas')
   inset.width = 160
   inset.height = 160
