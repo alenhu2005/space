@@ -56,6 +56,17 @@ test('頁首不佔用模型空間且分頁名稱不含個人署名', async ({ pa
   expect((await page.locator('.topbar').boundingBox())!.height).toBeLessThanOrEqual(48)
 })
 
+test('頁面縮放鎖定但 3D 模型保留觸控縮放', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open('?scene=sun-path')
+  const viewport = await page.locator('meta[name="viewport"]').getAttribute('content')
+  expect(viewport).toContain('maximum-scale=1.0')
+  expect(viewport).toContain('user-scalable=no')
+  await expect(page.locator('body')).toHaveCSS('touch-action', 'pan-x pan-y')
+  await expect(page.locator('#stage-canvas')).toHaveCSS('touch-action', 'none')
+  await expect(page.locator('.sun-view-surface').first()).toHaveCSS('touch-action', 'none')
+})
+
 test('太陽可切換原始舊版教材並返回保留參數的新版', async ({ page }) => {
   test.setTimeout(60_000)
   const lab = new LabPage(page)
