@@ -1,47 +1,364 @@
 # 天體運動 3D 實驗室
 
-以 Vite、TypeScript、Three.js 與 Astronomy Engine 製作的 108 課綱天體運動教師演示工具。主要教材依序為 **1 太陽、2 月相、3 日月食**；天球、潮汐與克卜勒保留在折疊的「開發者功能」。桌機、平板和手機具備相同功能。
+以 **Vite、TypeScript、Three.js 與 Astronomy Engine** 製作的互動式天體運動教材：
 
-- 太陽教材分為「當地太陽視運動」與「地球公轉與四季」兩個同步視窗；公轉視窗提供可旋轉、平移、縮放的自由視角，地球以平行太陽光與晨昏線顯示晝夜，並用青色緯圈標示觀測者隨地球由西向東自轉的每日軌跡（北極上方看為逆時針）。真實模式以實際北極與本初子午線建立地球姿態，讓觀測點固定在正確貼圖經緯度。
-- 當地太陽模型以不透明地面與加粗地平圈區分地平面上下，顯示北極星方向軸，並提供正午高度通式 `h = 90° − |φ − δ|` 與即時計算結果。
-- 太陽可切換原始 2D 舊版教材，返回新版時保留新版參數；左側場景選單可收合，手機收合後釋出模型空間。
-- 手機版以模型空間優先：三個主場景固定為等寬頁籤，太陽的地面／公轉模型使用全尺寸切換；季節、時間、緯度、速度與常用緯度是模型下方的常駐控制，不用展開抽屜。月相觀測卡在模型上緣常駐顯示月面、觀察地時間與月升／中天／月落，底部可直接調整播放速度；視角和進階圖層收在次要的顯示頁，3D 標籤會自動放大。
-- 三個主要教材皆支援游標位置縮放、雙指縮放與平移，另有地球／月球特寫；特寫跟隨天體移動，保留使用者調整的角度和倍率。
-- 月相教材同步顯示太空位置與地面所見月面；教學模式將觀測者固定在選定經緯度，標記隨地球自轉且所在地太陽時會隨月相時間軸推進，並列出月升、中天、月落的約略太陽時。真實模式把觀測者直接對齊地球貼圖經緯度，以小時連續推進實際地球自轉，顯示實際座標、民用時區、所在地太陽高度，以及 Astronomy Engine 計算的下一次月升、中天與月落；切換模式時會對齊當前月相，避免畫面突然跳相。
-- 日月食可切換太空、月球附近與地表附近；月食的地表視角由地球夜側朝向月球，另有月面本影／半影示意。月食忽略大氣折射與紅化，3D 月面使用微弱示意補光保持可辨識。
-- 真實模式的地表 3D 鏡頭是日下點／月下點示意，不是選定所在地；右上觀察小圖才對應所在地，天體低於所在地地平線時不顯示圓盤。
-- 開發者功能密碼為 `0000`，僅為避免課堂誤操作的前端介面鎖，**不是安全驗證或私人資料保護**。解鎖只保留於目前瀏覽器分頁工作階段。
+**https://alenhu2005.github.io/space/**
 
-## 本機執行
+網站以台灣 108 課綱中適合用動態模型理解的天體運動為範圍。主要教材依序為 **1 太陽、2 月相、3 日月食**；天球、潮汐與克卜勒收在「開發者功能」，避免課堂誤觸但保留完整內容。
 
-需要 Node.js 22 以上版本。
+## 教材場景
+
+| 場景 ID | 教材 | 主要內容 | 入口 |
+| --- | --- | --- | --- |
+| `sun-path` | 太陽視運動與四季 | 高度與方位、日出日落、晝長、地軸傾斜、四季、極晝極夜 | 主場景 1 |
+| `moon-phases` | 月相與月球運動 | 日地月位置、地面月面、同步自轉、月升／中天／月落 | 主場景 2 |
+| `eclipses` | 日食與月食 | 軌道交點、影錐、日全食／偏食／環食、月全食／偏食 | 主場景 3 |
+| `celestial-sphere` | 天球與星空運動 | 天球座標、天極、赤道、黃道、星軌與周年變化 | 開發者功能 |
+| `tides` | 日月引潮力與潮汐 | 近月與背月隆起、大潮與小潮 | 開發者功能 |
+| `kepler` | 克卜勒與行星運動 | 橢圓、等時等面積、週期、逆行與參考系 | 開發者功能 |
+
+所有場景共用播放／暫停、逐格、速度、時間軸、相機預設、自由旋轉、平移、縮放、圖層、全螢幕、重設與分享網址。介面同時支援桌機、平板和手機。
+
+開發者功能密碼為 `0000`。這只是避免課堂誤操作的前端介面鎖，**不是安全驗證**；解鎖狀態只存在目前瀏覽器分頁的 `sessionStorage`。
+
+## 技術選型
+
+| 技術 | 版本 | 用途 |
+| --- | ---: | --- |
+| TypeScript | 5.9 | 型別、狀態與場景契約 |
+| Vite | 8.2 | 開發伺服器、資源處理與建置 |
+| Three.js | 0.185 | WebGL 2 場景、材質、光源、相機與控制 |
+| Astronomy Engine | 2.1 | 日月行星位置、地平座標、升落、月相與日月食 |
+| Vitest | 4.1 | 數學、狀態與服務層單元測試 |
+| Playwright | 1.62 | 跨瀏覽器互動與視覺回歸 |
+
+前端使用原生 DOM，不引入 React 或其他 UI 框架。六個教材共用同一套播放、狀態、控制面板和 WebGL 渲染生命週期。
+
+## 架構概覽
+
+```text
+URL / DOM 操作 / 播放時鐘
+            │
+            ▼
+    simulationReducer
+            │  產生新的 SimulationState
+            ├──────────────────────────┐
+            ▼                          ▼
+      UI 與分享網址               StageController
+                                       │
+                    ┌──────────────────┴──────────────────┐
+                    ▼                                     ▼
+            SceneDefinition                        SceneVisual
+          教材資料、控制與預設          Three.js 物件、相機、update()
+                                                          │
+                                                          ▼
+                                                AstronomyProvider
+                                              Astronomy Engine 隔離層
+```
+
+主要目錄：
+
+```text
+src/
+├── core/
+│   ├── types.ts              # 場景、狀態、控制項與預設型別
+│   ├── state.ts              # reducer、輸入驗證、URL 解析與序列化
+│   ├── astro-math.ts         # 晝長、月相、克卜勒、潮汐純函式
+│   ├── geometry.ts           # 影錐、遮掩比例與食分類
+│   └── moon-observer.ts      # 月相觀測者、時區與事件格式化
+├── services/
+│   └── astronomy-provider.ts # 第三方天文計算封裝
+├── rendering/
+│   ├── stage.ts              # renderer、相機、動畫與場景生命週期
+│   └── helpers.ts            # 天體、線、標籤、影錐與 GPU 資源釋放
+├── scenes/
+│   ├── definitions.ts        # 六個資料驅動教材定義
+│   ├── visuals.ts            # 場景工廠
+│   ├── shared.ts             # SceneVisual 契約與共用座標工具
+│   └── *.ts                  # 各教材的 Three.js 實作
+├── main.ts                   # DOM、事件、模式切換與 URL 同步
+└── style.css                 # 桌機、平板、手機與全螢幕版面
+```
+
+### `SceneDefinition` 與 `SceneVisual`
+
+`SceneDefinition` 是可直接驅動介面的教材資料，包含穩定 ID、標題、年級、課綱代碼、觀察重點、常見迷思、控制項、預設情境與預設參數。
+
+`SceneVisual` 負責 WebGL 內容：
+
+- `root`：加入 Three.js scene 的根節點。
+- `cameras`：場景可用的相機預設。
+- `update(state)`：由狀態更新位置、材質、標籤並回傳即時指標。
+- `comparison`：可選的第二個同步視窗，目前用於太陽教材。
+- `cameraScale(state)`：依顯示比例調整相機尺度。
+- `dispose()`：清除場景自己的監聽器與額外資源。
+
+控制面板因此不用知道軌道、影錐或月面如何繪製；渲染器也不用理解每個控制項的教材意義。
+
+## 狀態管理與分享網址
+
+全站只有一份唯讀 `SimulationState`：
+
+```ts
+interface SimulationState {
+  sceneId: SceneId
+  mode: 'teaching' | 'real'
+  instant: string
+  observer: { latitude: number; longitude: number; elevation: number }
+  playing: boolean
+  speed: number
+  timeline: number
+  presetId: string
+  cameraPreset: string
+  layers: { labels: boolean; paths: boolean; shadows: boolean }
+  parameters: Readonly<Record<string, number>>
+}
+```
+
+所有變更都經過 `simulationReducer` 並建立新物件。reducer 同時負責輸入邊界：緯度 `-90…90°`、經度 `-180…180°`、海拔 `0…10,000 m`、速度 `0.1…128×`、時間軸 `0…1`；非有限數字與無效日期不會進入狀態。
+
+`parseUrlState()` 只接受白名單內的場景、模式、相機與圖層，無效值回到安全預設。`toUrlSearchParams()` 將目前狀態寫回網址，所以任何課堂情境都能收藏或分享：
+
+```text
+?scene=moon-phases
+&mode=real
+&time=2026-09-21T00:00:00.000Z
+&lat=25.0330
+&lon=121.5654
+&t=0.25000
+&camera=top
+&speed=1
+&layers=labels,paths,shadows
+&p.inclination=5.145
+```
+
+場景專用參數使用 `p.` 前綴，避免與全域狀態衝突。真實模式才將日期和觀測者座標寫入分享網址。
+
+## Three.js 渲染系統
+
+### WebGL 2 與材質
+
+`createStage()` 直接要求 WebGL 2 context，成功後建立一個 `THREE.WebGLRenderer`：
+
+- sRGB 輸出色彩空間。
+- ACES Filmic tone mapping。
+- PCF shadow map，且只在需要的場景啟用。
+- local clipping，用於地平面等幾何表達。
+- `OrbitControls.zoomToCursor = true`，朝游標或觸控焦點縮放。
+- 阻尼控制，避免旋轉與縮放突然停止。
+
+切換教材時不重建 renderer。`setScene()` 會斷開舊控制器、移除 overlay、釋放 geometry、material、texture，再建立新的 `SceneVisual`，避免 GPU 資源隨切換次數累積。
+
+### 太陽雙視窗
+
+太陽教材的「當地太陽視運動」與「地球公轉與四季」不是兩套獨立動畫。兩者使用同一份狀態和同一個動畫時鐘，再以 `setViewport()` 與 `setScissor()` 在同一張 WebGL canvas 中繪製兩個 scene/camera。
+
+這樣可以保證時間、季節、緯度與播放速度完全同步，也只占用一個 WebGL context。桌機由 CSS 並排顯示，手機則切換為全尺寸單一視窗。
+
+### 相機追蹤
+
+相機預設包含位置、目標與是否保留自由軌道。使用地球／月球特寫時，每次更新只把天體目標的位移加到相機和 OrbitControls target，保留使用者自己旋轉的角度與縮放倍率。
+
+相機切換通常使用指數插值平滑移動；開啟 `prefers-reduced-motion` 時直接到達目標位置。
+
+### 3D 標籤避讓
+
+標籤是 CanvasTexture sprite。渲染前把世界座標投影到螢幕，估算矩形；若位於鏡頭外、地平面下、父節點隱藏、超出 viewport，或與按鈕／其他標籤重疊，就暫時隱藏。手機標籤放大為基準的 `1.5×`，平板為 `1.18×`。
+
+## 天文計算與兩種模式
+
+### 教學模式
+
+教學模式讓使用者直接改變緯度、季節、公轉角、月相、軌道傾角或離心率。尺寸、距離、影錐、傾角與潮汐隆起可以誇張，以便在課堂畫面辨識。
+
+純數學集中於 `src/core/`：
+
+- 由緯度、赤緯與時角換算高度角與方位角。
+- 以日出時角計算晝長、極晝與極夜。
+- 將日月黃經差轉為月相與照亮比例。
+- 用牛頓法解克卜勒方程，再算軌道位置和速度。
+- 以 `P² = a³` 表示第三定律。
+- 由視圓、距離與影錐判斷全食、偏食、環食或未命中。
+- 由日月夾角表示引潮力疊加程度。
+
+### 真實模式
+
+`AstronomyProvider` 將 Astronomy Engine 隔離在單一介面後方，場景不直接依賴第三方型別。它提供：
+
+- 太陽、月球與行星的日心／地心向量。
+- 指定時間、經緯度與海拔的高度角、方位角。
+- J2000 亮星經歲差和自行修正後的地平位置。
+- 月相角、照亮比例、黃道緯度與指定月相時間。
+- 日月升起、中天與落下時間。
+- 當地恆星時。
+- 下一次月食、全球日食、指定地點日食。
+- 春分、夏至、秋分與冬至。
+
+狀態以 UTC ISO 字串保存 `instant`，顯示時才依指定民用時區格式化。定位權限只在使用者按下「使用裝置位置」後要求；拒絕後仍可手動輸入座標。
+
+### 地球貼圖與觀測者
+
+地球幾何座標、Blue Marble 貼圖本初子午線、地球自轉角與天文向量使用同一套轉換。觀測點由緯度、經度計算地表法向量，再跟隨地球由西向東自轉，避免時間顯示為晚上但標記仍停在晨線附近。
+
+## 各場景的實作重點
+
+### 太陽視運動與四季
+
+- 當地模型顯示地平圈、不透明地面、日行軌跡與指向北極星的地軸。
+- 高度、方位、日出日落和晝長由同一份日期／緯度更新。
+- 正午高度使用 `h = 90° − |φ − δ|`。
+- 公轉模型顯示平行日光、明暗面、晨昏線和青色觀測者自轉軌跡。
+- 原始 2D 版本保留於 `public/legacy-sun.html`，返回新版時保存新版參數。
+
+### 月相與月球運動
+
+- 3D 視角顯示日地月相對位置，地面月面以獨立 2D canvas 計算亮暗邊界。
+- 月球保持同一面大致朝向地球，可比較教學比例與地月等比例。
+- 教學模式由月相角估算月升、中天與月落的太陽時。
+- 真實模式由 Astronomy Engine 搜尋事件，並以指定民用時區顯示。
+- 觀測者標記、所在地時間、地球貼圖與太陽高度共用同一個 `instant`。
+
+### 日食與月食
+
+- `geometry.ts` 計算本影、半影、視圓重疊和遮掩比例。
+- 教學模式可放大月球軌道傾角，說明朔望不一定發生日月食。
+- 可切換太空、月球附近、地表附近；月食地表鏡頭位於地球夜側。
+- 真實模式可搜尋下一次食，區分全球事件與指定地點可見性。
+- 未模擬地球大氣折射與月食紅化，月面有微弱示意補光。
+
+### 天球與星空運動
+
+- 顯示地平圈、天頂／天底、子午圈、天極、天球赤道與黃道。
+- 內建 523 顆 `V ≤ 4` 的 HYG 亮星，不依賴執行時 CDN。
+- 真實模式把 J2000 座標轉換為指定日期和地點的地平座標。
+- 教學模式可直接改變緯度，比較天極高度、拱極星與升落軌跡。
+
+### 潮汐
+
+- 同時呈現近月側與背月側隆起，不把海水畫成只被月球單向拉走。
+- 朔、望顯示大潮；上弦、下弦顯示小潮。
+- 隆起與箭頭是教學誇張，不是沿岸潮位預報。
+
+### 克卜勒與行星運動
+
+- 橢圓由半長軸和離心率建立，太陽在一個焦點。
+- 平均近點角等速推進，再解克卜勒方程得到非等速位置。
+- 掃掠面積和速度向量解釋第二定律，軌道尺度與週期解釋第三定律。
+- 日心比較與地心火星逆行共用行星位置，只改變參考座標。
+
+## 響應式介面與觸控
+
+桌機使用左側場景導覽、中央模型、右側控制面板。手機把高頻控制放在模型下方，進階內容放入底部抽屜：
+
+- 太陽：季節、時間、緯度、速度與常用緯度常駐。
+- 月相：月面、照亮比例、觀察地時間、月升／中天／月落常駐。
+- 三個主場景使用固定等寬頁籤。
+- 太陽雙模型在窄直式畫面改成全尺寸切換。
+- 次要相機、圖層與教材資訊放進控制抽屜。
+
+為避免手機誤放大整個教材頁面，viewport 使用 `maximum-scale=1.0, user-scalable=no`，一般介面使用 `touch-action: pan-x pan-y`。可操作的 3D canvas 和太陽雙視窗則使用 `touch-action: none`，把觸控交給 OrbitControls，所以仍可單指旋轉、雙指縮放和平移。
+
+## 效能、資源與錯誤處理
+
+### 自動畫質
+
+啟動時依 `deviceMemory`、CPU 核心數與 `devicePixelRatio` 設定像素比上限：低階約 `1.15`、中階 `1.5`、高階 `1.85`。每 120 幀取樣 FPS：低於 34 FPS 時逐步降低像素比，高於 56 FPS 時逐步恢復，但不超過裝置上限。
+
+### 動畫與背景分頁
+
+- 使用 `WebGLRenderer.setAnimationLoop()`。
+- 單幀時間差最多 `0.1 s`，避免切回分頁後突然跳躍。
+- `document.hidden` 時停止更新和繪製。
+- 指標最多約每 140 ms 更新一次，內容相同時不重畫 DOM。
+- `ResizeObserver` 同步模型與分割視窗尺寸。
+
+### WebGL fallback
+
+無法建立 WebGL 2 時顯示瀏覽器／硬體加速提示，不留下空白 canvas。收到 `webglcontextlost` 時暫停渲染，`webglcontextrestored` 後恢復。場景切換與頁面卸載都會釋放 geometry、material、texture、controls 和 renderer。
+
+## 本機開發
+
+需要 **Node.js 22 以上版本**。
 
 ```bash
+git clone https://github.com/alenhu2005/space.git
+cd space
 npm ci
 npm run dev
 ```
 
-## 驗證
+開發網址預設為 `http://127.0.0.1:4173/`。
 
 ```bash
-npm test
-npm run test:coverage
-npm run build
-npx playwright install chromium
-npm run test:e2e
+npm run dev            # Vite 開發伺服器
+npm run build          # TypeScript 型別檢查 + 正式建置
+npm run preview        # 預覽 dist/
+npm test               # Vitest 單元測試
+npm run test:coverage  # 單元測試與 V8 覆蓋率
+npm run test:e2e       # Playwright 互動與視覺測試
 ```
 
-目前版本包含 58 個單元測試（語句覆蓋率 98.70%、分支覆蓋率 93.24%）、151 個 Chromium／Firefox／WebKit 互動檢查，以及 30 個 macOS 視窗尺寸視覺案例（含地球／月球縮放後追蹤及月食地表視角）。視覺基準刻意與 Darwin 平台綁定，避免不同作業系統的字型與 WebGL 差異造成誤報。
+正式檔案輸出至 `dist/`。Vite 開發模式使用 `/`，正式建置使用 GitHub Pages 所需的 `/space/` base path。
 
-## GitHub Pages
+## 測試策略
 
-推送到 `main` 或 `master` 後，GitHub Actions 會先執行測試與建置，再部署 `dist/`。Vite 的正式環境 base path 已設定為 `/space/`；舊的 `public.html` 會導向首頁。
+### 單元測試
 
-## 教材邊界
+`tests/unit/` 驗證地平座標、晝長、極晝極夜、月相、觀測者時間、地球自轉方向、貼圖經緯度、影錐、食分類、潮汐、克卜勒三定律、reducer、URL 安全回復與 AstronomyProvider 固定案例。
 
-- 教學模式會為理解而誇張尺寸、距離、軌道傾角或潮汐隆起；桌機畫面與教材說明會標示「非等比例」。
-- 真實模式使用實際日期、方向與軌道計算，但天體顯示尺寸仍非等比例。
-- 潮汐模組只呈現日月引潮方向與大小潮關係，不提供沿岸潮位預報。
-- 定位權限只在使用者主動按下「使用裝置位置」後要求；拒絕後仍可輸入經緯度。
+目前有 **58 個單元測試**。核心和服務層的行、函式、語句、分支覆蓋率門檻皆為 80%；目前語句覆蓋率約 98.7%、分支約 93.2%。
 
-素材授權與資料來源詳見 [`public/assets/SOURCES.md`](public/assets/SOURCES.md)。
+### 瀏覽器互動測試
+
+Playwright 涵蓋 Desktop Chrome、Chromium iPad Pro 11、Chromium iPhone 13、Desktop Firefox 與 Desktop WebKit。案例檢查六場景切換、播放、自由調參、定位拒絕、全螢幕、分享網址、WebGL fallback、頁面／模型觸控縮放和螢幕旋轉。
+
+完整矩陣目前為 **160 個 Playwright project cases**。沒有 WebGL 2 的 runner 會先驗證 fallback，再跳過依賴實際 3D 畫面的案例。
+
+### 視覺回歸
+
+固定日期、時間、相機和參數，在桌機、平板、手機比較六場景及重要特寫，共 **30 個 macOS 視覺案例**。基準圖刻意綁定 Darwin，避免 Linux 字型與 WebGL 驅動差異造成誤報。
+
+## GitHub Pages 部署
+
+`.github/workflows/deploy.yml` 在推送到 `main` 或 `master` 後執行：
+
+1. `verify`：Node 22、安裝、覆蓋率、建置、Chromium／Firefox／WebKit 互動測試。
+2. `visual`：macOS runner 執行桌機、平板、手機視覺回歸。
+3. `deploy`：只有前兩項成功才把 `dist/` 發布到 GitHub Pages。
+
+失敗時保存 Playwright 截圖、trace 和錯誤內容 14 天。部署使用 concurrency group，新推送會取消舊流程，避免舊版最後才上線。
+
+舊入口 `public/public.html` 導向新版首頁；`public/legacy-sun.html` 保留原始太陽教材。
+
+## 擴充方式
+
+新增場景最少需要：
+
+1. 在 `SCENE_IDS` 加入穩定 ID。
+2. 在 `definitions.ts` 加入 `SceneDefinition`。
+3. 建立場景檔案，回傳符合 `SceneVisual` 的 `root`、`cameras` 和 `update()`。
+4. 在 `visuals.ts` 的工廠加入分支。
+5. 為新數學補單元測試，為主要操作補 Playwright 案例。
+
+`update()` 應更新既有 Three.js 物件，避免每幀建立 geometry 或 material。監聽器與額外資源必須在 `dispose()` 清除。新增第三方天文能力應先擴充 `AstronomyProvider`；新增 URL 參數必須在解析邊界做白名單或範圍驗證。
+
+## 資料、素材與限制
+
+- 地球：NASA Scientific Visualization Studio「Blue Marble」。
+- 月球：NASA Scientific Visualization Studio「CGI Moon Kit」與 LRO。
+- 亮星：HYG Database v4.1，保留 523 顆 `V ≤ 4` 星體並加入部分繁體中文名稱。
+- 天文計算：Astronomy Engine。
+
+素材隨網站發布，不需要執行時 CDN。完整來源與授權見 [`public/assets/SOURCES.md`](public/assets/SOURCES.md)。
+
+模型限制：
+
+- 教學模式會誇張尺寸、距離、傾角、影錐和潮汐隆起，不能用畫面長度量測真實比例。
+- 真實模式使用實際日期、方向與軌道計算，但天體顯示尺寸仍可能不等比例。
+- 地表 3D 特寫主要說明日下點／月下點和受光方向；所在地可見性以觀察資訊為準。
+- 月食沒有模擬大氣折射、散射造成的紅色月面。
+- 潮汐模型不提供沿岸潮高或時間預報。
+- 亮星資料是教學子集，不是完整星表。
+- 網站需要現代 WebGL 2 瀏覽器；低階裝置功能相同，但畫質可能較低。
+
+課綱參考：[國家教育研究院自然科學領域課綱](https://www.naer.edu.tw/PageSyllabus?fid=177)。
