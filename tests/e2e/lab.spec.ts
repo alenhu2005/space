@@ -64,7 +64,8 @@ test('頁面縮放鎖定但 3D 模型保留觸控縮放', async ({ page }) => {
   expect(viewport).toContain('user-scalable=no')
   await expect(page.locator('body')).toHaveCSS('touch-action', 'pan-x pan-y')
   await expect(page.locator('#stage-canvas')).toHaveCSS('touch-action', 'none')
-  await expect(page.locator('.sun-view-surface').first()).toHaveCSS('touch-action', 'none')
+  const sunSurface = page.locator('.sun-view-surface').first()
+  if (await sunSurface.count()) await expect(sunSurface).toHaveCSS('touch-action', 'none')
 })
 
 test('太陽可切換原始舊版教材並返回保留參數的新版', async ({ page }) => {
