@@ -8,6 +8,7 @@ import {
   observerTimeZone,
   observerClockHour,
   teachingEarthRotation,
+  teachingInitialSolarTime,
   teachingObserverDirection,
   teachingMoonEvents,
   teachingSolarTime
@@ -37,6 +38,26 @@ describe('moon observer helpers', () => {
     expect(teachingSolarTime(12, .5)).toBeCloseTo(6.36708, 5)
     expect(teachingEarthRotation(121.5, 12)).toBeCloseTo(-301.5 * Math.PI / 180, 12)
     expect(teachingEarthRotation(121.5, 18)).toBeCloseTo(-211.5 * Math.PI / 180, 12)
+  })
+
+  it('places the selected observer on the day or night side at the chosen eclipse clock time', () => {
+    const longitude = 120.9642
+    const surface = earthTextureSurfaceDirection(24.7733, longitude)
+    const sunwardX = (hour: number) => {
+      const rotation = teachingEarthRotation(longitude, hour)
+      return surface.x * Math.cos(rotation) + surface.z * Math.sin(rotation)
+    }
+    expect(sunwardX(12)).toBeCloseTo(-Math.cos(24.7733 * Math.PI / 180), 10)
+    expect(sunwardX(0)).toBeCloseTo(Math.cos(24.7733 * Math.PI / 180), 10)
+    expect(sunwardX(6)).toBeCloseTo(0, 10)
+  })
+
+  it('sets the current teaching clock without changing the selected lunar phase', () => {
+    for (const timeline of [0, .1, .25, .5, .9]) {
+      for (const clock of [0, 6.25, 12, 18.5, 23.75]) {
+        expect(teachingSolarTime(teachingInitialSolarTime(clock, timeline), timeline)).toBeCloseTo(clock, 8)
+      }
+    }
   })
 
   it('formats explicit civil time zones without guessing from longitude', () => {

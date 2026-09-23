@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { teachingSolarTime } from '../../src/core/moon-observer'
 import { LabPage } from './pages/LabPage'
 
 const primaryScenes = [
@@ -225,7 +226,7 @@ test('太陽模型明確區分地平面上下並依緯度指向北極星', async
   await lab.open('?scene=sun-path&preset=june-solstice&t=0')
   await skipIfWebGLUnavailable(page)
   const local = page.getByRole('region', { name: '當地太陽視運動' })
-  await expect(local.getByText('北極星方向', { exact: true })).toBeVisible()
+  await expect(local.getByText('北極星', { exact: true })).toBeVisible()
   await expect(local).toHaveAttribute('data-polaris-altitude', '25.033')
   await expect(local).toHaveAttribute('data-horizon-state', 'below')
   await expect(local.locator('output')).toContainText('太陽在地平面下')
@@ -331,7 +332,7 @@ test('鍵盤與觸控控制有可辨識名稱', async ({ page }) => {
   await expect(page.getByRole('button', { name: '暫停' })).toBeVisible()
   await page.keyboard.press('Space')
   await expect(page.getByRole('button', { name: '播放' })).toBeVisible()
-  await expect(page.locator('canvas')).toHaveAttribute('aria-label', /3D 天體模型/)
+  await expect(page.locator('#stage-canvas')).toHaveAttribute('aria-label', /3D 天體模型/)
 })
 
 test('WebGL 2 不可用時顯示清楚提示', async ({ page }) => {
@@ -494,8 +495,11 @@ test('每個場景的所有預設、相機與圖層都可操作', async ({ page 
       await expect.poll(() => new URL(page.url()).searchParams.get('preset')).toBeNull()
       await expect.poll(() => {
         const value = new URL(page.url()).searchParams.get(`p.${key}`)
-        return value === null ? NaN : Number(value)
-      }).toBeCloseTo(Number(await control.inputValue()), 5)
+        if (value === null) return NaN
+        return key === 'observerSolarHour' && label === '月相'
+          ? teachingSolarTime(Number(value), Number(new URL(page.url()).searchParams.get('t')))
+          : Number(value)
+      }).toBeCloseTo(Number(await control.inputValue()), key === 'observerSolarHour' && label === '月相' ? 1 : 5)
     }
     await lab.selectControlTab('顯示')
     for (const layer of ['labels', 'paths', 'shadows']) {

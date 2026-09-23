@@ -4,11 +4,16 @@ import type { SceneDefinition, SimulationState } from '../core/types'
 import type { AstronomyProvider } from '../services/astronomy-provider'
 import { createSceneVisual, type CameraPreset, type SceneMetric, type SceneVisual } from '../scenes/visuals'
 import { createStarField, disposeObject } from './helpers'
+import { createObserverView } from './observer-view'
+import { shortestAzimuthTurn } from '../core/local-horizon'
+import type { ObserverEclipseAppearance } from '../core/observer-eclipse'
 
 interface StageCallbacks {
   readonly onAdvance: (elapsedSeconds: number) => void
+  readonly onFrame: (elapsedSeconds: number) => void
   readonly onMetrics: (metrics: readonly SceneMetric[]) => void
   readonly onStatus: (message: string) => void
+  readonly onObserverView: (azimuth: number, altitude: number, fov: number) => void
 }
 
 interface NavigatorWithMemory extends Navigator {
@@ -20,6 +25,8 @@ export interface StageController {
   setScene(definition: SceneDefinition): readonly CameraPreset[]
   setState(state: SimulationState): void
   focusCamera(id: string): void
+  lookAtBody(body: 'Sun' | 'Moon'): boolean
+  observerEclipseAppearance(): ObserverEclipseAppearance | undefined
   resize(): void
   dispose(): void
 }
@@ -64,6 +71,8 @@ export function createStage(
       setScene: () => [],
       setState: () => undefined,
       focusCamera: () => undefined,
+      lookAtBody: () => false,
+      observerEclipseAppearance: () => undefined,
       resize: () => undefined,
       dispose: () => undefined
     }
@@ -97,6 +106,10 @@ export function createStage(
   comparisonScene.background = new THREE.Color(0x02070b)
   comparisonScene.add(new THREE.HemisphereLight(0x98c7d4, 0x071013, .06))
   const comparisonCamera = new THREE.PerspectiveCamera(42, 1, .005, 1500)
+  const observerView = createObserverView(astronomy, `${import.meta.env.BASE_URL}assets/moon-lro.jpg`)
+  let lookGoal: { azimuth: number; altitude: number } | undefined
+  const pointers = new Map<number, { x: number; y: number }>()
+  let pinchDistance = 0
   let comparisonControls: OrbitControls | undefined
   let comparisonCameraId = 'free'
   let comparisonTrackedTarget: THREE.Vector3 | undefined
@@ -224,7 +237,19 @@ export function createStage(
       sampledFrames = 0
       sampledSeconds = 0
     }
+    callbacks.onFrame(elapsed)
     if (currentState?.playing) callbacks.onAdvance(elapsed)
+    if (lookGoal && currentState?.viewMode === 'observer') {
+      const current = currentState.observerView
+      const turn = shortestAzimuthTurn(current.azimuth, lookGoal.azimuth)
+      const climb = lookGoal.altitude - current.altitude
+      const alpha = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 1 - Math.exp(-elapsed * 6)
+      if (Math.abs(turn) + Math.abs(climb) < .15) {
+        callbacks.onObserverView(lookGoal.azimuth, lookGoal.altitude, current.fov)
+        lookGoal = undefined
+        container.dataset.observerTurning = 'false'
+      } else callbacks.onObserverView(current.azimuth + turn * alpha, current.altitude + climb * alpha, current.fov)
+    }
     if (cameraGoal) {
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       const alpha = reduced ? 1 : 1 - Math.exp(-elapsed * 7)
@@ -272,7 +297,10 @@ export function createStage(
     }
     activeRenderer.setScissorTest(false)
     activeRenderer.setViewport(0, 0, container.clientWidth, container.clientHeight)
-    if (visual?.comparison && comparisonSurface) {
+    if (currentState?.viewMode === 'observer') {
+      observerView.update(currentState)
+      activeRenderer.render(observerView.scene, observerView.camera)
+    } else if (visual?.comparison && comparisonSurface) {
       activeRenderer.clear()
       activeRenderer.setScissorTest(true)
       renderViewport(scene, camera, visual.root, labels, primaryViewport)
@@ -296,6 +324,7 @@ export function createStage(
     const width = Math.max(1, container.clientWidth)
     const height = Math.max(1, container.clientHeight)
     activeRenderer.setSize(width, height, false)
+    observerView.resize(width / height)
     visual?.overlay?.classList.toggle('stacked', Boolean(visual.comparison) && width < 650 && height > 430)
     const origin = container.getBoundingClientRect()
     const measure = (element: HTMLElement) => {
@@ -318,6 +347,46 @@ export function createStage(
   }
 
   activeRenderer.setAnimationLoop(animate)
+
+  canvas.addEventListener('pointerdown', (event) => {
+    if (currentState?.viewMode !== 'observer') return
+    lookGoal = undefined
+    container.dataset.observerTurning = 'false'
+    canvas.setPointerCapture(event.pointerId)
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()]
+      pinchDistance = Math.hypot(a!.x - b!.x, a!.y - b!.y)
+    } else pinchDistance = 0
+  })
+  canvas.addEventListener('pointermove', (event) => {
+    if (currentState?.viewMode !== 'observer' || !pointers.has(event.pointerId)) return
+    const before = pointers.get(event.pointerId)!
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()]
+      const distance = Math.hypot(a!.x - b!.x, a!.y - b!.y)
+      if (pinchDistance) callbacks.onObserverView(currentState.observerView.azimuth, currentState.observerView.altitude, currentState.observerView.fov * pinchDistance / distance)
+      pinchDistance = distance
+      return
+    }
+    const pixelsPerDegree = currentState.observerView.fov / Math.max(220, container.clientHeight)
+    callbacks.onObserverView(
+      currentState.observerView.azimuth + (event.clientX - before.x) * pixelsPerDegree,
+      currentState.observerView.altitude + (before.y - event.clientY) * pixelsPerDegree,
+      currentState.observerView.fov
+    )
+  })
+  const endPointer = (event: PointerEvent) => { pointers.delete(event.pointerId); pinchDistance = 0 }
+  canvas.addEventListener('pointerup', endPointer)
+  canvas.addEventListener('pointercancel', endPointer)
+  canvas.addEventListener('wheel', (event) => {
+    if (currentState?.viewMode !== 'observer') return
+    event.preventDefault()
+    lookGoal = undefined
+    container.dataset.observerTurning = 'false'
+    callbacks.onObserverView(currentState.observerView.azimuth, currentState.observerView.altitude, currentState.observerView.fov * Math.exp(event.deltaY * .001))
+  }, { passive: false })
 
   const resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(container)
@@ -403,7 +472,8 @@ export function createStage(
         resizeObserver.observe(primarySurface)
         resizeObserver.observe(comparisonSurface)
       }
-      controls.connect(visual.comparison ? primarySurface : canvas)
+      if (currentState?.viewMode !== 'observer') controls.connect(visual.comparison ? primarySurface : canvas)
+      else comparisonControls?.disconnect()
       resizeObserver.observe(container)
       labels = []
       comparisonLabels = []
@@ -419,7 +489,16 @@ export function createStage(
     },
     setState(state) {
       const cameraChanged = state.cameraPreset !== currentState?.cameraPreset
+      const viewChanged = state.viewMode !== currentState?.viewMode
       currentState = state
+      if (viewChanged) {
+        if (state.viewMode === 'observer') { controls.disconnect(); comparisonControls?.disconnect() }
+        else { controls.connect(visual?.comparison ? primarySurface : canvas); if (comparisonSurface) comparisonControls?.connect(comparisonSurface) }
+        container.classList.toggle('observer-active', state.viewMode === 'observer')
+        lookGoal = undefined
+        container.dataset.observerTurning = 'false'
+      }
+      observerView.setHeading(state.observerView.azimuth, state.observerView.altitude, state.observerView.fov)
       activeRenderer.shadowMap.enabled = state.sceneId === 'eclipses' && state.mode === 'teaching' && state.layers.shadows
       const scale = visual?.cameraScale?.(state) ?? 1
       if (cameraChanged || scale !== previousCameraScale) selectCamera(state.cameraPreset)
@@ -431,6 +510,20 @@ export function createStage(
       selectCamera(id)
       if (id === 'seasons') selectComparisonCamera('free')
     },
+    lookAtBody(body) {
+      if (currentState?.viewMode !== 'observer') return false
+      observerView.update(currentState)
+      const target = observerView.bodyPosition(body)
+      if (target.altitude < 0) return false
+      lookGoal = { azimuth: target.azimuth, altitude: Math.min(90, target.altitude) }
+      container.dataset.observerTurning = 'true'
+      return true
+    },
+    observerEclipseAppearance() {
+      if (currentState?.sceneId !== 'eclipses' || currentState.viewMode !== 'observer') return undefined
+      observerView.update(currentState)
+      return observerView.eclipseAppearance()
+    },
     dispose() {
       activeRenderer.setAnimationLoop(null)
       resizeObserver.disconnect()
@@ -441,6 +534,7 @@ export function createStage(
       if (visual?.comparison) disposeObject(visual.comparison.root)
       visual?.overlay?.remove()
       disposeObject(backgroundStars)
+      observerView.dispose()
       activeRenderer.dispose()
     }
   }

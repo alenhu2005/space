@@ -14,6 +14,10 @@ export function createCelestialSphere(context: BuildContext): SceneVisual {
   )
   horizon.rotation.x = -Math.PI / 2
   root.add(horizon, ring(4.05, COLORS.cyan, .82), ring(4.5, COLORS.muted, .16, 'xy'), ring(4.5, COLORS.muted, .16, 'yz'))
+  const observerMarker = new THREE.Mesh(new THREE.SphereGeometry(.07, 12, 8), new THREE.MeshBasicMaterial({ color: COLORS.cyan }))
+  observerMarker.position.y = .08
+  const observerLabel = addLabel(root, '觀測者', new THREE.Vector3(0, .3, 0), '#55d9d0', .22)
+  root.add(observerMarker)
 
   const shell = new THREE.Mesh(
     new THREE.SphereGeometry(4.5, 28, 18),
@@ -136,6 +140,7 @@ export function createCelestialSphere(context: BuildContext): SceneVisual {
         realKey = nextKey
       }
       applyLayers(root, state)
+      observerMarker.visible = observerLabel.visible = state.cameraPreset !== 'inside' && state.layers.labels
       sky.children.filter((child) => child instanceof THREE.Sprite && namedRealStars.some(({ star }) => child.userData.text === star.name)).forEach((label) => { label.visible = state.layers.labels && state.mode !== 'real'; label.userData.modeHidden = state.mode === 'real' })
       return [
         { label: '緯度', value: `${Math.abs(latitude).toFixed(1)}°${latitude >= 0 ? 'N' : 'S'}` },

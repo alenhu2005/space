@@ -1,5 +1,8 @@
 import { clamp } from './astro-math'
-import { SCENE_IDS, type ObserverLocation, type SceneId, type SimulationMode, type SimulationState } from './types'
+import { normalizeAzimuth, observerAltitude, observerFov } from './local-horizon'
+import { SCENE_IDS, type ObserverLocation, type ObserverViewState, type SceneId, type SimulationMode, type SimulationState, type ViewMode } from './types'
+
+export const OBSERVER_SCENES: readonly SceneId[] = ['sun-path', 'moon-phases', 'eclipses', 'celestial-sphere']
 
 const DEFAULT_OBSERVER: ObserverLocation = Object.freeze({
   latitude: 25.033,
@@ -10,6 +13,8 @@ const DEFAULT_OBSERVER: ObserverLocation = Object.freeze({
 export type SimulationAction =
   | { readonly type: 'set-scene'; readonly sceneId: SceneId }
   | { readonly type: 'set-mode'; readonly mode: SimulationMode }
+  | { readonly type: 'set-view'; readonly viewMode: ViewMode }
+  | { readonly type: 'set-observer-view'; readonly observerView: Partial<ObserverViewState> }
   | { readonly type: 'set-observer'; readonly observer: ObserverLocation }
   | { readonly type: 'set-instant'; readonly instant: string }
   | { readonly type: 'set-playing'; readonly playing: boolean }
@@ -25,6 +30,8 @@ export function createInitialState(now = new Date()): SimulationState {
   return {
     sceneId: 'celestial-sphere',
     mode: 'teaching',
+    viewMode: 'space',
+    observerView: Object.freeze({ azimuth: 0, altitude: 20, fov: 65 }),
     instant: now.toISOString(),
     observer: DEFAULT_OBSERVER,
     playing: false,
@@ -40,9 +47,16 @@ export function createInitialState(now = new Date()): SimulationState {
 export function simulationReducer(state: SimulationState, action: SimulationAction): SimulationState {
   switch (action.type) {
     case 'set-scene':
-      return { ...state, sceneId: action.sceneId, presetId: '', parameters: Object.freeze({}), playing: false }
+      return { ...state, sceneId: action.sceneId, viewMode: OBSERVER_SCENES.includes(action.sceneId) ? state.viewMode : 'space', presetId: '', parameters: Object.freeze({}), playing: false }
     case 'set-mode':
       return { ...state, mode: action.mode, playing: false }
+    case 'set-view':
+      return { ...state, viewMode: action.viewMode === 'observer' && !OBSERVER_SCENES.includes(state.sceneId) ? 'space' : action.viewMode }
+    case 'set-observer-view': {
+      const { azimuth = state.observerView.azimuth, altitude = state.observerView.altitude, fov = state.observerView.fov } = action.observerView
+      if (![azimuth, altitude, fov].every(Number.isFinite)) return state
+      return { ...state, observerView: Object.freeze({ azimuth: normalizeAzimuth(azimuth), altitude: observerAltitude(altitude), fov: observerFov(fov) }) }
+    }
     case 'set-observer':
       if (!Object.values(action.observer).every(Number.isFinite)) return state
       return {
@@ -110,11 +124,21 @@ export function parseUrlState(search: URLSearchParams, now = new Date()): Simula
   const layerNames = search.get('layers')?.split(',')
   const validLayers = layerNames?.every((layer) => ['labels', 'paths', 'shadows', ''].includes(layer))
   const instant = search.get('time')
+  const viewMode = search.get('view') === 'observer' && OBSERVER_SCENES.includes(isSceneId(scene) ? scene : defaults.sceneId) ? 'observer' : 'space'
+  const azimuth = finiteNumber(search.get('az'))
+  const altitude = finiteNumber(search.get('alt'))
+  const fov = finiteNumber(search.get('fov'))
 
   return {
     ...defaults,
     sceneId: isSceneId(scene) ? scene : defaults.sceneId,
     mode: isMode(mode) ? mode : defaults.mode,
+    viewMode,
+    observerView: viewMode === 'observer' ? Object.freeze({
+      azimuth: azimuth === undefined ? defaults.observerView.azimuth : normalizeAzimuth(azimuth),
+      altitude: altitude === undefined ? defaults.observerView.altitude : observerAltitude(altitude),
+      fov: fov === undefined ? defaults.observerView.fov : observerFov(fov)
+    }) : defaults.observerView,
     presetId,
     cameraPreset: validCameras.includes(camera) ? camera : defaults.cameraPreset,
     speed: speed !== undefined && speed >= .1 && speed <= 128 ? speed : defaults.speed,
@@ -132,8 +156,14 @@ export function toUrlSearchParams(state: SimulationState): URLSearchParams {
   const search = new URLSearchParams()
   search.set('scene', state.sceneId)
   search.set('mode', state.mode)
+  if (state.viewMode === 'observer' && OBSERVER_SCENES.includes(state.sceneId)) {
+    search.set('view', 'observer')
+    search.set('az', state.observerView.azimuth.toFixed(2))
+    search.set('alt', state.observerView.altitude.toFixed(2))
+    search.set('fov', state.observerView.fov.toFixed(1))
+  }
   if (state.presetId) search.set('preset', state.presetId)
-  if (state.mode === 'real') {
+  if (state.mode === 'real' || state.viewMode === 'observer') {
     search.set('time', state.instant)
     search.set('lat', state.observer.latitude.toFixed(4))
     search.set('lon', state.observer.longitude.toFixed(4))

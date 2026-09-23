@@ -43,6 +43,11 @@ export function teachingSolarTime(initialHour: number, timeline: number): number
   return modulo(initialHour + timeline * SYNODIC_MONTH_DAYS * 24, 24)
 }
 
+/** Set the displayed local solar time without changing the selected lunar phase. */
+export function teachingInitialSolarTime(localHour: number, timeline: number): number {
+  return modulo(localHour - timeline * SYNODIC_MONTH_DAYS * 24, 24)
+}
+
 /**
  * Earth rotation that keeps the selected longitude attached to the surface
  * while placing it at the requested local solar time. The model Sun is -x.

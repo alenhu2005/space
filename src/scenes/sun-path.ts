@@ -8,6 +8,7 @@ import {
   radiansToDegrees
 } from '../core/astro-math'
 import { earthTextureSurfaceDirection } from '../core/moon-observer'
+import { BRIGHT_STARS } from '../data/bright-stars'
 import { COLORS, ring, lineFromPoints, createSun, createEarth, createArrow } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, horizontalVector, riseSetMetrics, type BuildContext, type SceneVisual } from './shared'
 
@@ -24,7 +25,31 @@ export function createSunPath(context: BuildContext): SceneVisual {
   horizonBand.position.y = .025
   const polarAxis = createArrow(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, .06, 0), 3.55, COLORS.cyan)
   polarAxis.userData.layer = 'paths'
-  const polarLabel = addLabel(root, '北極星方向', new THREE.Vector3(), '#55d9d0', .24)
+  const polarLabel = addLabel(root, '北極星・近北天極', new THREE.Vector3(), '#55d9d0', .45)
+  const polarStar = new THREE.Mesh(new THREE.SphereGeometry(.055, 10, 8), new THREE.MeshBasicMaterial({ color: COLORS.white }))
+  polarStar.userData.layer = 'labels'
+  root.add(polarStar)
+  const southPole = new THREE.Mesh(new THREE.SphereGeometry(.075, 12, 8), new THREE.MeshBasicMaterial({ color: COLORS.cyan }))
+  southPole.userData.layer = 'labels'
+  root.add(southPole)
+  const southPoleLabel = addLabel(root, '南天極・無亮星', new THREE.Vector3(), '#55d9d0', .45)
+  const cruxStars = [60893, 60530, 62239, 59565].map((id) => BRIGHT_STARS.find((star) => star.id === id)!)
+  const cruxMarkers = cruxStars.map(() => {
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(.045, 10, 8), new THREE.MeshBasicMaterial({ color: COLORS.white }))
+    marker.userData.layer = 'labels'
+    root.add(marker)
+    return marker
+  })
+  const cruxLines = [[0, 1], [2, 3]].map(() => {
+    const line = lineFromPoints([new THREE.Vector3(), new THREE.Vector3()], COLORS.white, .72)
+    line.userData.layer = 'paths'
+    root.add(line)
+    return line
+  })
+  const cruxLabel = addLabel(root, '南十字座', new THREE.Vector3(), '#eef7f5', .45)
+  const cruxPoleGuide = lineFromPoints([new THREE.Vector3(), new THREE.Vector3()], COLORS.cyan, .55)
+  cruxPoleGuide.userData.layer = 'paths'
+  root.add(cruxPoleGuide)
   root.add(ground, horizonBand, polarAxis)
   addLabel(root, '北', new THREE.Vector3(0, .08, -4.35), '#eef7f5')
   addLabel(root, '南', new THREE.Vector3(0, .08, 4.35), '#8fa3a4')
@@ -103,7 +128,7 @@ export function createSunPath(context: BuildContext): SceneVisual {
   <section class="sun-view" id="sun-local-panel" data-sun-panel="local" role="region" aria-label="當地太陽視運動">
     <header class="sun-view-heading"><h3>當地太陽視運動</h3><span>地面視角</span></header>
     <div class="sun-view-surface" data-viewport="primary" aria-label="當地模型拖曳區；鍵盤可用下方視角按鈕"></div>
-    <div class="sun-path-legend"><span class="summer-key">夏至</span><span class="equinox-key">春秋分</span><span class="winter-key">冬至</span><span class="polar-key">北極星方向</span></div>
+    <div class="sun-path-legend"><span class="summer-key">夏至線</span><span class="equinox-key">春秋分線</span><span class="winter-key">冬至線</span><span class="polar-key">北極星</span><span>南十字座→南天極</span></div>
     <output class="sun-view-readout"></output>
   </section>
   <section class="sun-view" id="sun-space-panel" data-sun-panel="space" role="region" aria-label="地球公轉與四季">
@@ -179,6 +204,40 @@ export function createSunPath(context: BuildContext): SceneVisual {
       const polarDirection = horizontalVector(latitude, 0, 1).normalize()
       polarAxis.setDirection(polarDirection)
       polarLabel.position.copy(polarDirection).multiplyScalar(3.72).add(new THREE.Vector3(0, .06, 0))
+      polarStar.position.copy(polarDirection).multiplyScalar(3.75)
+      polarStar.visible = polarLabel.visible = latitude >= 0 && state.layers.labels
+      const southPoleDirection = horizontalVector(-latitude, 180, 1).normalize()
+      southPole.position.copy(southPoleDirection).multiplyScalar(3.75)
+      southPoleLabel.position.copy(southPole.position).add(new THREE.Vector3(0, .25, 0))
+      const sidereal = state.mode === 'real'
+        ? context.astronomy.localSiderealDegrees(instant, state.observer.longitude)
+        : (hour - 12) * 15 + seasonAngle
+      const cruxPositions = cruxStars.map((star) => state.mode === 'real'
+        ? context.astronomy.starHorizontalPosition({ rightAscensionHours: star.ra, declinationDegrees: star.dec, properMotionRaMasYear: star.properMotionRaMasYear, properMotionDecMasYear: star.properMotionDecMasYear }, instant, state.observer)
+        : horizontalCoordinates(sidereal - star.ra * 15, star.dec, latitude))
+      cruxPositions.forEach((star, index) => {
+        cruxMarkers[index]!.position.copy(horizontalVector(star.altitude, star.azimuth, 3.75))
+        cruxMarkers[index]!.visible = star.altitude >= 0 && state.layers.labels
+      })
+      for (const [index, [first, second]] of ([[0, 1], [2, 3]] as const).entries()) {
+        const line = cruxLines[index]!
+        const positions = line.geometry.getAttribute('position') as THREE.BufferAttribute
+        const a = cruxMarkers[first]!.position
+        const b = cruxMarkers[second]!.position
+        positions.setXYZ(0, a.x, a.y, a.z)
+        positions.setXYZ(1, b.x, b.y, b.z)
+        positions.needsUpdate = true
+        line.geometry.computeBoundingSphere()
+        line.visible = cruxPositions[first]!.altitude >= 0 && cruxPositions[second]!.altitude >= 0 && state.layers.paths
+      }
+      cruxLabel.position.copy(cruxMarkers[0]!.position).add(new THREE.Vector3(0, .25, 0))
+      cruxLabel.visible = cruxPositions[0]!.altitude >= 0 && state.layers.labels
+      const guidePositions = cruxPoleGuide.geometry.getAttribute('position') as THREE.BufferAttribute
+      const guideStart = cruxMarkers[1]!.position
+      guidePositions.setXYZ(0, guideStart.x, guideStart.y, guideStart.z)
+      guidePositions.setXYZ(1, southPole.position.x, southPole.position.y, southPole.position.z)
+      guidePositions.needsUpdate = true
+      cruxPoleGuide.geometry.computeBoundingSphere()
       if (latitude !== cachedLatitude) {
         updatePath(summerPath, latitude, 23.44)
         updatePath(equinoxPath, latitude, 0)
@@ -241,6 +300,13 @@ export function createSunPath(context: BuildContext): SceneVisual {
       footprint.rotation.z = degreesToRadians(90 - position.azimuth)
       applyLayers(root, state)
       applyLayers(seasons, state)
+      polarStar.visible = polarLabel.visible = latitude >= 0 && state.layers.labels
+      southPole.visible = southPoleLabel.visible = latitude < 0 && state.layers.labels
+      cruxPoleGuide.visible = latitude < 0 && cruxPositions[1]!.altitude >= 0 && state.layers.paths
+      cruxMarkers.forEach((marker, index) => { marker.visible = cruxPositions[index]!.altitude >= 0 && state.layers.labels })
+      cruxLines[0]!.visible = cruxPositions[0]!.altitude >= 0 && cruxPositions[1]!.altitude >= 0 && state.layers.paths
+      cruxLines[1]!.visible = cruxPositions[2]!.altitude >= 0 && cruxPositions[3]!.altitude >= 0 && state.layers.paths
+      cruxLabel.visible = cruxPositions[0]!.altitude >= 0 && state.layers.labels
       pathLegend.hidden = !state.layers.paths
       observerTrailLegend.hidden = !state.layers.paths
       footprint.visible = state.layers.shadows && irradiance > 0

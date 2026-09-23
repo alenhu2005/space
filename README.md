@@ -64,12 +64,14 @@ src/
 │   ├── types.ts              # 場景、狀態、控制項與預設型別
 │   ├── state.ts              # reducer、輸入驗證、URL 解析與序列化
 │   ├── astro-math.ts         # 晝長、月相、克卜勒、潮汐純函式
+│   ├── local-horizon.ts      # 共用 ENU 地平座標、方位與觀測相機角度邊界
 │   ├── geometry.ts           # 影錐、遮掩比例與食分類
 │   └── moon-observer.ts      # 月相觀測者、時區與事件格式化
 ├── services/
 │   └── astronomy-provider.ts # 第三方天文計算封裝
 ├── rendering/
 │   ├── stage.ts              # renderer、相機、動畫與場景生命週期
+│   ├── observer-view.ts      # 地面天空、示意地景、固定觀測相機與天體位置
 │   └── helpers.ts            # 天體、線、標籤、影錐與 GPU 資源釋放
 ├── scenes/
 │   ├── definitions.ts        # 六個資料驅動教材定義
@@ -103,6 +105,8 @@ src/
 interface SimulationState {
   sceneId: SceneId
   mode: 'teaching' | 'real'
+  viewMode: 'space' | 'observer'
+  observerView: { azimuth: number; altitude: number; fov: number }
   instant: string
   observer: { latitude: number; longitude: number; elevation: number }
   playing: boolean
@@ -132,7 +136,7 @@ interface SimulationState {
 &p.inclination=5.145
 ```
 
-場景專用參數使用 `p.` 前綴，避免與全域狀態衝突。真實模式才將日期和觀測者座標寫入分享網址。
+場景專用參數使用 `p.` 前綴，避免與全域狀態衝突。真實模式與地面觀測視角都會寫入日期和觀測者座標；地面觀測另以 `view=observer&az=…&alt=…&fov=…` 保存朝向與視角。URL 解析會驗證所有數字並限制高度角 `-12…90°`、FOV `12…85°`，不適用的場景會安全回到太空視角。
 
 ## Three.js 渲染系統
 
@@ -148,6 +152,14 @@ interface SimulationState {
 - 阻尼控制，避免旋轉與縮放突然停止。
 
 切換教材時不重建 renderer。`setScene()` 會斷開舊控制器、移除 overlay、釋放 geometry、material、texture，再建立新的 `SceneVisual`，避免 GPU 資源隨切換次數累積。
+
+### 地面觀測視角
+
+太陽、月相、日月食與天球可在「太空視角／地面觀測」間切換。Stage 保留原 `SceneVisual` 與第三人稱相機，只切換同一個 renderer 的顯示相機及場景；模擬時間、經緯度、模型參數、播放狀態與原相機 preset 均不重設。潮汐與克卜勒仍只提供太空視角。
+
+共用 local horizon frame 採 ENU：東 `+X`、上 `+Y`、北 `-Z`。Astronomy Engine 的高度角與方位角先經 `horizonDirection()` 轉換，再放入天空場景；`0/90/180/270°` 分別是北／東／南／西。相機層級分成觀測錨點、地平 frame、yaw rig、pitch rig 與 PerspectiveCamera。拖曳只改 yaw／pitch，滾輪和雙指縮放只改 FOV，觀測者不會在地表移動。桌機方向鍵按住可連續平滑轉向，Shift 加速；按下畫面底部半透明的「看向太陽／月球」會以最短方位角路徑平滑轉向，天體在地平線下時不會假裝可見。觀看位置切換在頂欄。
+
+真實模式按選定 UTC 時刻與經緯度計算日月、亮星的當地地平位置；教學模式沿用場景的季節、月相和時間軸，因此屬示意天空。兩種模式皆依太陽高度連續漸變白天、晨昏與夜空，星光亦逐漸顯隱。橘色太陽、青色月球周日軌跡按場景顯示，可用「軌跡」圖層開關；真實模式取選定時刻前後各 12 小時的日月地平位置，教學模式的完整周日線則封閉接合，且月相播放不逐格重建相同軌跡。太陽場景另外顯示夏至、春秋分、冬至三條路徑，以及北極星和南十字座的方位參照；南十字座依日期、時間和緯度升落，並以導向線連到獨立標記的南天極，兩者不是同一位置。北極星只是接近北天極，南天極沒有明亮的定位星。低矮遠山、地面方位柱與 30°／60° 天空高度圈是方向參照，不代表選定地點的實際地形或地平遮蔽；一般日月圓盤為方便辨識而放大，日食模式則以實際或標明的教學視角半徑比較。天氣與真實民用時區不由經緯度推算。天文位置只在時間、地點或教學參數變更時重算；單純轉頭只更新相機 transform。畫面上方只留精簡方位角，其餘觀測資料不遮擋天空。
 
 ### 太陽雙視窗
 
@@ -204,7 +216,7 @@ interface SimulationState {
 
 ### 太陽視運動與四季
 
-- 當地模型顯示地平圈、不透明地面、日行軌跡與指向北極星的地軸。
+- 當地模型顯示地平圈、不透明地面、夏至／春秋分／冬至日行軌跡與指向北極星的地軸。南十字座四顆亮星依時刻和緯度定位，南天極則獨立標記並與十字座相連；白天標記只供方向教學，不代表肉眼能看到星星。
 - 高度、方位、日出日落和晝長由同一份日期／緯度更新。
 - 正午高度使用 `h = 90° − |φ − δ|`。
 - 公轉模型顯示平行日光、明暗面、晨昏線和青色觀測者自轉軌跡。
@@ -215,16 +227,20 @@ interface SimulationState {
 - 3D 視角顯示日地月相對位置，地面月面以獨立 2D canvas 計算亮暗邊界。
 - 月球保持同一面大致朝向地球，可比較教學比例與地月等比例。
 - 教學模式由月相角估算月升、中天與月落的太陽時。
+- 「觀測當地太陽時」可直接調到 15 分鐘刻度，不必靠跨越整個朔望月的時間軸找時刻；設定當前時刻不改月相，之後播放時仍會推進地球自轉。
 - 真實模式由 Astronomy Engine 搜尋事件，並以指定民用時區顯示。
 - 觀測者標記、所在地時間、地球貼圖與太陽高度共用同一個 `instant`。
 
 ### 日食與月食
 
 - `geometry.ts` 計算本影、半影、視圓重疊和遮掩比例。
-- 教學模式可放大月球軌道傾角，說明朔望不一定發生日月食。
+- 教學模式可放大月球軌道傾角，說明朔望不一定發生日月食；另以獨立的當地太陽時控制地球自轉、以時間軸控制月球相位，避免兩者角度抵消使月球看似不動。
+- 太空視角的教學觀測者標記會依所選緯度與當地太陽時轉到地球受光面或背光面。教學預設在赤道中心線呈現日全／環食，移開緯度後當地食分會改變；教學偏移與天體大小仍屬非等比例示意。
+- 地面視角用日月所見圓盤的角半徑與重疊面積呈現全食、偏食與環食；環食保留完整光環。教學模式的月球視差隨誇張的日月視圓一併放大，觀測地離開示意半影後不再錯誤顯示偏食；真實模式使用選定地點的地平座標判斷日食，不把全球有食誤當成當地可見。
+- 月食以地球本影和月球的相對位置判斷食分，另檢查當地月球是否升起；月面紅化僅為示意，沒有大氣散射模型。
 - 可切換太空、月球附近、地表附近；月食地表鏡頭位於地球夜側。
 - 真實模式可搜尋下一次食，區分全球事件與指定地點可見性。
-- 未模擬地球大氣折射與月食紅化，月面有微弱示意補光。
+- 未模擬地球大氣折射，月面有微弱示意補光。
 
 ### 天球與星空運動
 
@@ -304,19 +320,19 @@ npm run test:e2e       # Playwright 互動與視覺測試
 
 ### 單元測試
 
-`tests/unit/` 驗證地平座標、晝長、極晝極夜、月相、觀測者時間、地球自轉方向、貼圖經緯度、影錐、食分類、潮汐、克卜勒三定律、reducer、URL 安全回復與 AstronomyProvider 固定案例。
+`tests/unit/` 驗證 ENU 地平座標、方位正規化、相機角度邊界、晝長、極晝極夜、月相、觀測者時間、地球自轉方向、貼圖經緯度、影錐、食分類、潮汐、克卜勒三定律、reducer、URL 安全回復與 AstronomyProvider 固定案例。
 
-目前有 **58 個單元測試**。核心和服務層的行、函式、語句、分支覆蓋率門檻皆為 80%；目前語句覆蓋率約 98.7%、分支約 93.2%。
+目前有 **73 個單元測試**。核心和服務層的行、函式、語句、分支覆蓋率門檻皆為 80%；實際覆蓋率請以 `npm run test:coverage` 為準。
 
 ### 瀏覽器互動測試
 
 Playwright 涵蓋 Desktop Chrome、Chromium iPad Pro 11、Chromium iPhone 13、Desktop Firefox 與 Desktop WebKit。案例檢查六場景切換、播放、自由調參、定位拒絕、全螢幕、分享網址、WebGL fallback、頁面／模型觸控縮放和螢幕旋轉。
 
-完整矩陣目前為 **160 個 Playwright project cases**。沒有 WebGL 2 的 runner 會先驗證 fallback，再跳過依賴實際 3D 畫面的案例。
+另外覆蓋地面觀測切換、拖曳跨北、pitch 限制、按住方向鍵連續轉向、滾輪／手機雙指 FOV、快速看向天體、半影外無日食及 URL 還原。沒有 WebGL 2 的 runner 會先驗證 fallback，再跳過依賴實際 3D 畫面的案例。
 
 ### 視覺回歸
 
-固定日期、時間、相機和參數，在桌機、平板、手機比較六場景及重要特寫，共 **30 個 macOS 視覺案例**。基準圖刻意綁定 Darwin，避免 Linux 字型與 WebGL 驅動差異造成誤報。
+固定日期、時間、相機和參數，在桌機、平板、手機比較六場景、重要特寫與固定方位的地面天空，並在手機檢查日夜變化、南北方星空、三條節氣路徑、教學與真實日月食，共 **54 個 macOS 視覺案例**。基準圖刻意綁定 Darwin，避免 Linux 字型與 WebGL 驅動差異造成誤報。
 
 ## GitHub Pages 部署
 
@@ -347,6 +363,7 @@ Playwright 涵蓋 Desktop Chrome、Chromium iPad Pro 11、Chromium iPhone 13、D
 - 地球：NASA Scientific Visualization Studio「Blue Marble」。
 - 月球：NASA Scientific Visualization Studio「CGI Moon Kit」與 LRO。
 - 亮星：HYG Database v4.1，保留 523 顆 `V ≤ 4` 星體並加入部分繁體中文名稱。
+- 南天極與南十字座的區別：[NASA「What is the North Star and How Do You Find It?」](https://science.nasa.gov/solar-system/what-is-the-north-star-and-how-do-you-find-it/)；南天極沒有明亮的極星，南十字座可用來找南方，但不在南天極上。
 - 天文計算：Astronomy Engine。
 
 素材隨網站發布，不需要執行時 CDN。完整來源與授權見 [`public/assets/SOURCES.md`](public/assets/SOURCES.md)。

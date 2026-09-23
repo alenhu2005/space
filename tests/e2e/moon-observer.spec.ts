@@ -46,6 +46,22 @@ test('月面視窗將觀測者固定於地表並隨地球自轉更新時間', as
   }
 })
 
+test('月相模型可獨立選目前觀測太陽時，不必拖動整個朔望月時間軸', async ({ page }) => {
+  const lab = new LabPage(page)
+  await lab.open('?scene=moon-phases&mode=teaching&view=observer&t=0.25&p.observerSolarHour=12')
+  await skipIfWebGLUnavailable(page)
+  await lab.openControls()
+  await lab.selectControlTab('模型')
+  await page.getByRole('slider', { name: '觀測當地太陽時' }).fill('18.5')
+  await expect(page.locator('[data-output="observerSolarHour"]')).toHaveText('18:30')
+  await expect(page.locator('#observer-time-label')).toContainText('教學太陽時 18:30')
+  expect(Number(new URL(page.url()).searchParams.get('t'))).toBe(.25)
+  await lab.closeControls()
+  await page.locator('[data-view="space"]').click()
+  await expect(page.locator('.observer-time')).toHaveText('教學太陽時 18:30')
+  await expect(page.locator('.scene-inset')).toHaveAttribute('data-observer-local-hour', '18.5')
+})
+
 test('月面視窗使用明示民用時區，UTC 與台北相差八小時', async ({ page }) => {
   const lab = new LabPage(page)
   await lab.open('?scene=moon-phases&mode=real&time=2025-01-01T00%3A15%3A00Z&lat=25.033&lon=121.5654')

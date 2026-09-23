@@ -9,6 +9,13 @@ export const SCENE_IDS = [
 
 export type SceneId = (typeof SCENE_IDS)[number]
 export type SimulationMode = 'teaching' | 'real'
+export type ViewMode = 'space' | 'observer'
+
+export interface ObserverViewState {
+  readonly azimuth: number
+  readonly altitude: number
+  readonly fov: number
+}
 
 export interface ObserverLocation {
   readonly latitude: number
@@ -25,6 +32,8 @@ export interface LayerState {
 export interface SimulationState {
   readonly sceneId: SceneId
   readonly mode: SimulationMode
+  readonly viewMode: ViewMode
+  readonly observerView: ObserverViewState
   readonly instant: string
   readonly observer: ObserverLocation
   readonly playing: boolean

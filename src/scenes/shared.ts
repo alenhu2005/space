@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { degreesToRadians } from '../core/astro-math'
+import { horizonDirection } from '../core/local-horizon'
 import type { SceneDefinition, SimulationState } from '../core/types'
 import type { AstronomyProvider } from '../services/astronomy-provider'
 import { createLabel, setLayerVisibility } from '../rendering/helpers'
@@ -70,13 +70,8 @@ export function riseSetMetrics(astronomy: AstronomyProvider, body: 'Sun' | 'Moon
 }
 
 export function horizontalVector(altitude: number, azimuth: number, radius: number): THREE.Vector3 {
-  const alt = degreesToRadians(altitude)
-  const az = degreesToRadians(azimuth)
-  return new THREE.Vector3(
-    Math.sin(az) * Math.cos(alt) * radius,
-    Math.sin(alt) * radius,
-    -Math.cos(az) * Math.cos(alt) * radius
-  )
+  const direction = horizonDirection(altitude, azimuth)
+  return new THREE.Vector3(direction.x * radius, direction.y * radius, direction.z * radius)
 }
 
 /** Keep the Sun to the left while preserving true relative 3D ecliptic directions. */

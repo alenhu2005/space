@@ -105,4 +105,31 @@ describe('simulation state', () => {
     expect(simulationReducer(preset, { type: 'set-instant', instant: 'invalid' })).toBe(preset)
     expect(simulationReducer(preset, { type: 'set-instant', instant: '2025-04-01' }).instant).toBe('2025-04-01T00:00:00.000Z')
   })
+
+  it('preserves observer direction, position and instant across Space/Observer view and URL', () => {
+    const initial = { ...createInitialState(new Date('2026-09-20T14:53:00Z')), sceneId: 'sun-path' as const }
+    const located = simulationReducer(initial, { type: 'set-observer', observer: { latitude: 24.77, longitude: 120.96, elevation: 10 } })
+    const viewed = simulationReducer(simulationReducer(located, { type: 'set-view', viewMode: 'observer' }), {
+      type: 'set-observer-view', observerView: { azimuth: 361, altitude: 200, fov: 2 }
+    })
+    expect(viewed.observerView).toEqual({ azimuth: 1, altitude: 90, fov: 12 })
+    const parsed = parseUrlState(toUrlSearchParams(viewed))
+    expect(parsed.viewMode).toBe('observer')
+    expect(parsed.observerView).toEqual(viewed.observerView)
+    expect(parsed.observer.latitude).toBe(24.77)
+    expect(parsed.instant).toBe(initial.instant)
+    const back = simulationReducer(viewed, { type: 'set-view', viewMode: 'space' })
+    expect(back.observer).toEqual(viewed.observer)
+    expect(back.instant).toBe(viewed.instant)
+    expect(back.parameters).toBe(viewed.parameters)
+  })
+
+  it('rejects invalid observer URL values and does not enable unsupported scenes', () => {
+    const parsed = parseUrlState(new URLSearchParams('scene=tides&view=observer&az=NaN&alt=Infinity&fov=-999'))
+    expect(parsed.viewMode).toBe('space')
+    expect(parsed.observerView).toEqual(createInitialState().observerView)
+    const supported = parseUrlState(new URLSearchParams('scene=eclipses&view=observer&az=-10&alt=-100&fov=999'))
+    expect(supported.observerView).toEqual({ azimuth: 350, altitude: -12, fov: 85 })
+    expect(simulationReducer(supported, { type: 'set-observer-view', observerView: { fov: NaN } })).toBe(supported)
+  })
 })

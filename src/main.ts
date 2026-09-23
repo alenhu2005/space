@@ -1,6 +1,9 @@
 import './style.css'
 import { moonPhaseFromAngle } from './core/astro-math'
-import { createInitialState, parseUrlState, simulationReducer, toUrlSearchParams, type SimulationAction } from './core/state'
+import { cardinalDirection } from './core/local-horizon'
+import { formatObserverCoordinates, formatSolarHour, teachingInitialSolarTime, teachingSolarTime } from './core/moon-observer'
+import type { ObserverEclipseAppearance } from './core/observer-eclipse'
+import { OBSERVER_SCENES, createInitialState, parseUrlState, simulationReducer, toUrlSearchParams, type SimulationAction } from './core/state'
 import type { SceneId, SimulationMode, SimulationState } from './core/types'
 import { SCENE_BY_ID } from './scenes/definitions'
 import { createAstronomyProvider, type EclipseSummary } from './services/astronomy-provider'
@@ -17,6 +20,9 @@ app.innerHTML = `
         <div class="mode-switch" aria-label="模擬模式">
           <button class="mode-button" data-mode="teaching">教學</button>
           <button class="mode-button" data-mode="real">真實</button>
+        </div>
+        <div class="view-switch" id="view-switch" role="group" aria-label="觀看位置">
+          <button data-view="space">太空視角</button><button data-view="observer">地面觀測</button>
         </div>
         <span class="location-chip" id="location-chip"></span>
         <button class="icon-button" data-action="share" aria-label="複製分享連結" title="複製分享連結">↗</button>
@@ -36,13 +42,27 @@ app.innerHTML = `
       </nav>
 
       <section class="stage-wrap" id="stage-wrap" aria-label="三維天體模型">
-        <canvas id="stage-canvas" tabindex="0" aria-label="可拖曳、縮放與旋轉的 3D 天體模型；空白鍵播放，右方向鍵逐格"></canvas>
+        <canvas id="stage-canvas" tabindex="0" aria-label="3D 天體模型；可拖曳、縮放與旋轉；空白鍵播放，地面視角按住方向鍵連續轉頭，太空視角以右方向鍵逐格"></canvas>
         <div class="stage-heading">
           <div class="stage-eyebrow" id="stage-eyebrow"></div>
           <h2 class="stage-title" id="stage-title"></h2>
           <p class="stage-description" id="stage-description"></p>
         </div>
         <div class="scale-badge" id="scale-badge">教學示意・非等比例</div>
+        <div class="observer-panel" id="observer-panel" aria-label="觀看方位" hidden>
+          <div class="observer-bearing">
+            <div class="observer-bearing-current"><strong id="observer-cardinal"></strong><span id="observer-azimuth"></span></div>
+            <div class="observer-compass-window" aria-hidden="true"><div class="observer-compass-track" id="observer-compass-track"></div><i class="observer-compass-pointer"></i></div>
+          </div>
+          <div class="visually-hidden" id="observer-place"></div>
+          <div class="visually-hidden" id="observer-time-label"></div>
+          <div class="visually-hidden" id="observer-angles"></div>
+        </div>
+        <div class="observer-targets"><button data-look="Sun">看向太陽</button><button data-look="Moon">看向月球</button></div>
+        <div class="observer-eclipse-preview" id="observer-eclipse-preview" aria-label="選定地點食象特寫" hidden>
+          <canvas id="observer-eclipse-canvas" width="160" height="160" aria-label="食象放大示意"></canvas>
+          <span id="observer-eclipse-status"></span>
+        </div>
         <button class="inset-toggle" data-action="toggle-inset" aria-controls="scene-inset-overlay" aria-expanded="false" hidden>觀測資訊</button>
         <div class="camera-toolbar" id="camera-toolbar" aria-label="相機視角"></div>
         <div class="metrics" id="metrics" aria-label="觀測數據"></div>
@@ -114,6 +134,9 @@ let lastUrlWrite = -Infinity
 let latestMetrics: readonly SceneMetric[] = []
 let mobileControlTab: 'model' | 'display' | 'info' = 'model'
 let selectedEclipse: { readonly kind: 'solar' | 'lunar'; readonly result: EclipseSummary; readonly observerKey: string } | undefined
+const heldLookKeys = new Set<string>()
+let lookVelocityAzimuth = 0
+let lookVelocityAltitude = 0
 
 function readDeveloperUnlock(): boolean {
   try {
@@ -129,10 +152,33 @@ function isDeveloperScene(sceneId: SceneId): boolean {
 
 const canvas = document.querySelector<HTMLCanvasElement>('#stage-canvas')!
 const stageWrap = document.querySelector<HTMLElement>('#stage-wrap')!
+const viewSwitcher = document.querySelector<HTMLElement>('#view-switch')!
+const viewButtons = Array.from(viewSwitcher.querySelectorAll<HTMLButtonElement>('[data-view]'))
+const observerPanel = document.querySelector<HTMLElement>('#observer-panel')!
+const observerPlace = document.querySelector<HTMLElement>('#observer-place')!
+const observerTimeLabel = document.querySelector<HTMLElement>('#observer-time-label')!
+const observerCardinal = document.querySelector<HTMLElement>('#observer-cardinal')!
+const observerAzimuth = document.querySelector<HTMLElement>('#observer-azimuth')!
+const observerCompassTrack = document.querySelector<HTMLElement>('#observer-compass-track')!
+const observerAngles = document.querySelector<HTMLElement>('#observer-angles')!
+observerCompassTrack.innerHTML = Array.from({ length: 73 }, (_, index) => {
+  const angle = (index - 24) * 15
+  const degree = (angle + 720) % 360
+  const label = degree % 90 === 0 ? ['N', 'E', 'S', 'W'][degree / 90] : degree % 45 === 0 ? String(degree) : ''
+  return `<span class="observer-compass-tick${degree % 45 === 0 ? ' major' : ''}" style="left:${index * 30}px">${label}</span>`
+}).join('')
+const observerEclipsePreview = document.querySelector<HTMLElement>('#observer-eclipse-preview')!
+const observerEclipseCanvas = document.querySelector<HTMLCanvasElement>('#observer-eclipse-canvas')!
+const observerEclipseStatus = document.querySelector<HTMLElement>('#observer-eclipse-status')!
+let observerMetadataKey = ''
+let observerHeadingKey = ''
+let switchViewKey = ''
 const stage = createStage(canvas, stageWrap, astronomy, {
   onAdvance: advanceSimulation,
+  onFrame: advanceKeyboardLook,
   onMetrics: renderMetrics,
-  onStatus: setCanvasStatus
+  onStatus: setCanvasStatus,
+  onObserverView: setObserverHeading
 })
 
 cameras = stage.setScene(SCENE_BY_ID[state.sceneId])
@@ -262,8 +308,36 @@ function dispatch(action: SimulationAction, render = true): void {
   state = simulationReducer(state, action)
   stage.setState(state)
   if (render) renderAll()
-  else renderTransport()
+  else {
+    renderTransport()
+    if (state.viewMode === 'observer') renderObserverInfo()
+  }
+  if (action.type === 'set-view') stage.resize()
   syncUrl()
+}
+
+function setObserverHeading(azimuth: number, altitude: number, fov: number): void {
+  state = simulationReducer(state, { type: 'set-observer-view', observerView: { azimuth, altitude, fov } })
+  stage.setState(state)
+  renderObserverInfo()
+  syncUrl()
+}
+
+function advanceKeyboardLook(elapsed: number): void {
+  if (state.viewMode !== 'observer' || heldLookKeys.size === 0) {
+    lookVelocityAzimuth = lookVelocityAltitude = 0
+    return
+  }
+  const horizontal = Number(heldLookKeys.has('ArrowRight')) - Number(heldLookKeys.has('ArrowLeft'))
+  const vertical = Number(heldLookKeys.has('ArrowUp')) - Number(heldLookKeys.has('ArrowDown'))
+  const speed = heldLookKeys.has('ShiftLeft') || heldLookKeys.has('ShiftRight') ? 160 : 90
+  const smoothing = 1 - Math.exp(-elapsed * 14)
+  lookVelocityAzimuth += (horizontal * speed - lookVelocityAzimuth) * smoothing
+  lookVelocityAltitude += (vertical * speed - lookVelocityAltitude) * smoothing
+  if (horizontal || vertical) {
+    const { azimuth, altitude, fov } = state.observerView
+    setObserverHeading(azimuth + lookVelocityAzimuth * elapsed, altitude + lookVelocityAltitude * elapsed, fov)
+  }
 }
 
 function setSimulationMode(mode: SimulationMode): void {
@@ -342,6 +416,8 @@ function resetScene(): void {
     ...initial,
     sceneId: state.sceneId,
     mode: state.mode,
+    viewMode: state.viewMode,
+    observerView: state.observerView,
     observer: state.observer,
     layers: state.layers,
     parameters: Object.freeze({ ...presetParameters }),
@@ -367,6 +443,7 @@ function advanceSimulation(elapsed: number): void {
   }
   stage.setState(state)
   renderTransport()
+  if (state.viewMode === 'observer') renderObserverInfo()
 }
 
 function stepSimulation(): void {
@@ -391,6 +468,7 @@ function renderAll(): void {
   document.querySelector('#stage-description')!.textContent = definition.description
   document.querySelector('#scale-badge')!.textContent = state.mode === 'real' ? '真實方向・尺寸非等比例' : '教學示意・非等比例'
   renderTopbar()
+  renderObserverInfo()
   renderCameras()
   renderControls()
   renderMobileSunControls()
@@ -401,6 +479,100 @@ function renderAll(): void {
   if (active && !active.isConnected) {
     const next = focusId ? document.getElementById(focusId) : focusData ? Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => Object.entries(focusData).every(([key, value]) => button.dataset[key] === value)) : undefined
     next?.focus({ preventScroll: true })
+  }
+}
+
+function renderObserverInfo(): void {
+  const supported = OBSERVER_SCENES.includes(state.sceneId)
+  const observer = supported && state.viewMode === 'observer'
+  stageWrap.classList.toggle('observer-active', observer)
+  viewSwitcher.hidden = !supported
+  const nextSwitchKey = `${supported}|${state.viewMode}`
+  if (switchViewKey !== nextSwitchKey) {
+    viewButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.view === state.viewMode)))
+    switchViewKey = nextSwitchKey
+  }
+  observerPanel.hidden = !observer
+  observerEclipsePreview.hidden = !observer || state.sceneId !== 'eclipses'
+  if (!observer) return
+  const { azimuth, altitude, fov } = state.observerView
+  const zenith = altitude > 89.5
+  const metadataKey = `${state.sceneId}|${state.mode}|${state.instant.slice(0, 19)}|${state.timeline.toFixed(4)}|${state.observer.latitude}|${state.observer.longitude}|${JSON.stringify(state.parameters)}`
+  const metadataChanged = metadataKey !== observerMetadataKey
+  if (metadataChanged) {
+    const modelLatitude = state.mode === 'teaching' && ['moon-phases', 'eclipses'].includes(state.sceneId)
+      ? state.parameters.observerLatitude ?? state.observer.latitude : state.observer.latitude
+    const modelLongitude = state.mode === 'teaching' && state.sceneId === 'moon-phases' ? state.parameters.observerLongitude ?? state.observer.longitude : state.observer.longitude
+    observerPlace.textContent = `${state.mode === 'teaching' ? '教學觀測地' : '觀測地'} ${formatObserverCoordinates(modelLatitude, modelLongitude)}`
+    observerTimeLabel.textContent = state.mode === 'real'
+      ? `${new Date(state.instant).toLocaleString('zh-TW', { hour12: false })}（裝置時區）`
+      : state.sceneId === 'moon-phases'
+        ? `教學太陽時 ${formatSolarHour(teachingSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline))} · ${timelineLabel()}`
+        : state.sceneId === 'eclipses'
+          ? `教學太陽時 ${formatSolarHour(state.parameters.observerSolarHour ?? 12)} · ${timelineLabel()}`
+          : `教學時間 ${timelineLabel()}${state.sceneId === 'sun-path' ? ` · 緯度 ${(state.parameters.latitude ?? state.observer.latitude).toFixed(1)}°` : ''}`
+    observerMetadataKey = metadataKey
+  }
+  if (state.sceneId === 'eclipses' && metadataChanged) {
+    const appearance = stage.observerEclipseAppearance()
+    if (appearance) drawObserverEclipse(appearance)
+  }
+  const headingKey = `${azimuth.toFixed(1)}|${altitude.toFixed(1)}|${fov.toFixed(0)}`
+  if (headingKey !== observerHeadingKey) {
+    observerCardinal.textContent = zenith ? '天頂' : cardinalDirection(azimuth)
+    observerAzimuth.textContent = zenith ? '' : `${azimuth.toFixed(0)}°`
+    observerCompassTrack.style.transform = `translateX(-${(azimuth + 360) * 2}px)`
+    observerAngles.textContent = `Az ${zenith ? '—' : `${azimuth.toFixed(1)}°`} · Alt ${altitude >= 0 ? '+' : ''}${altitude.toFixed(1)}° · FOV ${fov.toFixed(0)}°`
+    observerHeadingKey = headingKey
+  }
+}
+
+function drawObserverEclipse(appearance: ObserverEclipseAppearance): void {
+  const context = observerEclipseCanvas.getContext('2d')
+  if (!context) return
+  const name = appearance.kind === 'none' ? '無食象' : appearance.kind === 'total' ? '全食' : appearance.kind === 'annular' ? '環食' : appearance.kind === 'penumbral' ? '半影月食' : '偏食'
+  const sunBelow = appearance.type === 'solar' && !appearance.sunAboveHorizon
+  const moonBelow = appearance.type === 'lunar' && !appearance.visible && appearance.kind !== 'none'
+  observerEclipsePreview.dataset.kind = appearance.kind
+  observerEclipsePreview.dataset.visible = String(appearance.visible)
+  observerEclipsePreview.dataset.coverage = appearance.coverage.toFixed(3)
+  observerEclipseStatus.textContent = sunBelow ? '此地太陽在地平線下'
+    : moonBelow ? '此地月球在地平線下'
+      : appearance.kind === 'none' ? '此地此時無食象'
+        : `${state.mode === 'real' ? '所在地' : '教學'}${appearance.type === 'solar' ? '日' : '月'}${name} · ${Math.round(appearance.coverage * 100)}%`
+  context.clearRect(0, 0, 160, 160)
+  if (sunBelow || moonBelow) return
+  const center = 80
+  if (appearance.type === 'solar') {
+    const radius = 49
+    const glow = context.createRadialGradient(center, center, radius * .75, center, center, radius * 1.35)
+    glow.addColorStop(0, 'rgba(247,185,85,.85)')
+    glow.addColorStop(1, 'rgba(247,185,85,0)')
+    context.fillStyle = glow
+    context.beginPath(); context.arc(center, center, radius * 1.35, 0, Math.PI * 2); context.fill()
+    context.fillStyle = '#ffd276'
+    context.beginPath(); context.arc(center, center, radius, 0, Math.PI * 2); context.fill()
+    const separation = Math.hypot(appearance.moonOffsetXDegrees, appearance.moonOffsetYDegrees)
+    if (separation < appearance.sunRadiusDegrees + appearance.moonRadiusDegrees) {
+      const scale = radius / appearance.sunRadiusDegrees
+      context.fillStyle = '#09141b'
+      context.beginPath()
+      context.arc(center + appearance.moonOffsetXDegrees * scale, center - appearance.moonOffsetYDegrees * scale, appearance.moonRadiusDegrees * scale, 0, Math.PI * 2)
+      context.fill()
+    }
+  } else {
+    const radius = 49
+    context.fillStyle = '#c8cbd0'
+    context.beginPath(); context.arc(center, center, radius, 0, Math.PI * 2); context.fill()
+    if (appearance.kind !== 'none') {
+      context.save()
+      context.beginPath(); context.arc(center, center, radius, 0, Math.PI * 2); context.clip()
+      context.fillStyle = appearance.kind === 'penumbral' ? 'rgba(73,48,48,.3)' : 'rgba(91,28,23,.87)'
+      context.beginPath()
+      context.arc(center + appearance.umbraOffsetInMoonRadii * radius, center, appearance.umbraRadiusInMoonRadii * radius, 0, Math.PI * 2)
+      context.fill()
+      context.restore()
+    }
   }
 }
 
@@ -432,6 +604,8 @@ function renderTopbar(): void {
   })
   document.querySelector('#location-chip')!.textContent = state.mode === 'real'
     ? `${state.observer.latitude.toFixed(2)}°, ${state.observer.longitude.toFixed(2)}°`
+    : state.sceneId === 'eclipses'
+      ? `教學觀測緯度 ${(state.parameters.observerLatitude ?? 0).toFixed(1)}°`
     : '台北基準・可自由調整'
 }
 
@@ -448,10 +622,13 @@ function renderControls(): void {
       <span class="preset-label">${preset.label}</span><span class="preset-desc">${preset.description}</span>
     </button>`).join('')
   const renderParameter = (slider: (typeof definition.controls)[number]): string => {
-    const value = state.parameters[slider.key] ?? definition.defaultParameters[slider.key] ?? slider.min
+    const storedValue = state.parameters[slider.key] ?? definition.defaultParameters[slider.key] ?? slider.min
+    const value = slider.key === 'observerSolarHour' && state.sceneId === 'moon-phases'
+      ? teachingSolarTime(storedValue, state.timeline)
+      : storedValue
     if (slider.options) return `<label class="field-label control-row">${slider.label}<select class="field-input" id="parameter-${slider.key}" data-parameter="${slider.key}">${slider.options.map((option) => `<option value="${option.value}" ${option.value === value ? 'selected' : ''}>${option.label}</option>`).join('')}</select></label>`
     return `<div class="control-row">
-      <label class="control-label" for="parameter-${slider.key}"><span>${slider.label}</span><output class="control-value" data-output="${slider.key}">${value.toFixed(slider.step < .1 ? 2 : 1)}${slider.unit}</output></label>
+      <label class="control-label" for="parameter-${slider.key}"><span>${slider.label}</span><output class="control-value" data-output="${slider.key}">${slider.key === 'observerSolarHour' ? formatSolarHour(value) : `${value.toFixed(slider.step < .1 ? 2 : 1)}${slider.unit}`}</output></label>
       <input type="range" id="parameter-${slider.key}" data-parameter="${slider.key}" data-unit="${slider.unit}" min="${slider.min}" max="${slider.max}" step="${slider.step}" value="${value}" />
     </div>`
   }
@@ -571,6 +748,13 @@ function renderTransport(): void {
   if (quickTimelineOutput) quickTimelineOutput.value = timelineLabel()
   const quickSpeed = document.querySelector<HTMLSelectElement>('#sun-quick-speed')
   if (quickSpeed) quickSpeed.value = String(state.speed)
+  if (state.sceneId === 'moon-phases' && state.mode === 'teaching') {
+    const localHour = teachingSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline)
+    const clock = document.querySelector<HTMLInputElement>('#parameter-observerSolarHour')
+    if (clock && document.activeElement !== clock) clock.value = String(localHour)
+    const clockOutput = document.querySelector<HTMLOutputElement>('[data-output="observerSolarHour"]')
+    if (clockOutput) clockOutput.value = formatSolarHour(localHour)
+  }
   const play = document.querySelector<HTMLButtonElement>('[data-action="play"]')!
   play.textContent = state.playing ? 'Ⅱ' : '▶'
   play.setAttribute('aria-label', state.playing ? '暫停' : '播放')
@@ -699,6 +883,14 @@ function eclipseStatus(): string {
 app.addEventListener('click', (event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>('button')
   if (!target) return
+  if (target.dataset.view === 'space' || target.dataset.view === 'observer') {
+    dispatch({ type: 'set-view', viewMode: target.dataset.view })
+    return
+  }
+  if (target.dataset.look === 'Sun' || target.dataset.look === 'Moon') {
+    if (!stage.lookAtBody(target.dataset.look)) showTransientStatus(`${target.dataset.look === 'Sun' ? '太陽' : '月球'}目前在地平線下`)
+    return
+  }
   if (target.dataset.controlTab === 'model' || target.dataset.controlTab === 'display' || target.dataset.controlTab === 'info') {
     mobileControlTab = target.dataset.controlTab
     updateControlTabs()
@@ -827,10 +1019,11 @@ app.addEventListener('input', (event) => {
   }
   if (input.dataset.parameter) {
     const value = Number(input.value)
-    dispatch({ type: 'set-parameter', key: input.dataset.parameter, value }, false)
+    const moonClock = state.sceneId === 'moon-phases' && state.mode === 'teaching' && input.dataset.parameter === 'observerSolarHour'
+    dispatch({ type: 'set-parameter', key: input.dataset.parameter, value: moonClock ? teachingInitialSolarTime(value, state.timeline) : value }, false)
     document.querySelectorAll('[data-preset]').forEach((button) => button.setAttribute('aria-pressed', 'false'))
     const output = document.querySelector<HTMLOutputElement>(`[data-output="${input.dataset.parameter}"]`)
-    if (output) output.value = `${value}${input.dataset.unit ?? ''}`
+    if (output) output.value = input.dataset.parameter === 'observerSolarHour' ? formatSolarHour(value) : `${value}${input.dataset.unit ?? ''}`
   }
 })
 
@@ -877,7 +1070,23 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault()
     dispatch({ type: 'set-playing', playing: !state.playing })
   }
+  if (state.viewMode === 'observer' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    if (event.code.startsWith('Arrow')) {
+      event.preventDefault()
+      heldLookKeys.add(event.code)
+      if (event.shiftKey) heldLookKeys.add('ShiftLeft')
+      return
+    }
+    if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') heldLookKeys.add(event.code)
+  }
   if (event.code === 'ArrowRight') stepSimulation()
 })
+
+window.addEventListener('keyup', (event) => {
+  heldLookKeys.delete(event.code)
+  if (!event.shiftKey) { heldLookKeys.delete('ShiftLeft'); heldLookKeys.delete('ShiftRight') }
+})
+window.addEventListener('blur', () => heldLookKeys.clear())
+document.addEventListener('visibilitychange', () => { if (document.hidden) heldLookKeys.clear() })
 
 window.addEventListener('beforeunload', () => stage.dispose())

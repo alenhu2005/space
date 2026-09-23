@@ -102,6 +102,34 @@ body.nav-collapsed .scene-number { display: block; font-size: .85rem; }
 .stage-title { margin: 0; font-size: clamp(1.15rem, 2vw, 1.65rem); font-weight: 670; letter-spacing: -.025em; }
 .stage-description { margin: 6px 0 0; color: var(--muted); font-size: .76rem; line-height: 1.5; max-width: 52ch; }
 .scale-badge { position: absolute; top: 17px; right: 16px; z-index: 5; padding: 6px 8px; border: 1px solid rgba(247,185,85,.36); border-radius: 6px; color: var(--amber); background: rgba(24, 16, 5, .72); font: 650 .61rem ui-monospace, monospace; letter-spacing: .06em; backdrop-filter: blur(10px); }
+.view-switch { display: flex; flex: none; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5, 14, 19, .9); }
+.view-switch[hidden], .observer-panel[hidden], .observer-eclipse-preview[hidden] { display: none; }
+.view-switch button, .observer-targets button { min-height: 34px; padding: 6px 9px; border: 0; border-radius: 5px; color: var(--muted); background: transparent; cursor: pointer; font-size: .68rem; }
+.view-switch button[aria-pressed="true"] { color: #061112; background: var(--cyan); font-weight: 700; }
+.view-switch button:hover, .observer-targets button:hover { color: var(--ink); }
+.stage-wrap:not(.observer-active) .scale-badge { top: 62px; }
+.observer-panel { position: absolute; top: 7px; left: 50%; z-index: 7; width: min(520px, calc(100% - 280px)); transform: translateX(-50%); pointer-events: none; }
+.observer-bearing { color: var(--ink); background: rgba(6, 15, 22, .22); font: 650 .69rem ui-monospace, monospace; text-shadow: 0 1px 4px #000, 0 1px 9px #000; white-space: nowrap; }
+.observer-bearing-current { display: flex; align-items: center; justify-content: center; gap: 6px; height: 20px; padding-top: 5px; }
+.observer-bearing-current strong { color: var(--cyan); }
+.observer-compass-window { position: relative; height: 18px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent); mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent); }
+.observer-compass-track { position: absolute; top: 0; left: 50%; width: 2160px; height: 18px; }
+.observer-compass-tick { position: absolute; top: 0; transform: translateX(-50%); min-width: 22px; color: #dcebed; text-align: center; font-size: .52rem; }
+.observer-compass-tick::before { content: ''; display: block; width: 1px; height: 5px; margin: 0 auto 1px; background: rgba(220,235,237,.85); }
+.observer-compass-tick.major { color: var(--ink); font-weight: 800; }
+.observer-compass-tick.major::before { height: 7px; }
+.observer-compass-pointer { position: absolute; top: 0; left: 50%; z-index: 1; width: 0; height: 0; transform: translateX(-50%); border-right: 4px solid transparent; border-left: 4px solid transparent; border-top: 6px solid var(--ink); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.observer-targets { position: absolute; bottom: 12px; left: 12px; z-index: 7; display: flex; gap: 5px; }
+.stage-wrap:not(.observer-active) .observer-targets { display: none; }
+.observer-targets button { border: 1px solid rgba(220,235,237,.26); color: var(--ink); background: rgba(5,14,19,.22); backdrop-filter: blur(3px); text-shadow: 0 1px 5px #000; }
+.observer-eclipse-preview { position: absolute; right: 14px; bottom: 15px; z-index: 7; width: 138px; padding: 5px 5px 7px; border: 1px solid var(--line); border-radius: 9px; background: rgba(5,14,19,.88); text-align: center; pointer-events: none; }
+.observer-eclipse-preview canvas { width: 118px; height: 118px; margin: auto; touch-action: auto; }
+.observer-eclipse-preview span { display: block; color: var(--ink); font-size: .6rem; line-height: 1.3; }
+.stage-wrap.observer-active .sun-views, .stage-wrap.observer-active .scene-inset,
+.stage-wrap.observer-active .inset-toggle, .stage-wrap.observer-active .camera-toolbar,
+.stage-wrap.observer-active .metrics, .stage-wrap.observer-active .stage-heading,
+.stage-wrap.observer-active .scale-badge { display: none !important; }
 .camera-toolbar { position: absolute; right: 16px; bottom: 16px; z-index: 5; display: flex; gap: 5px; }
 .camera-button { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: rgba(5, 13, 18, .74); color: var(--muted); font-size: .65rem; cursor: pointer; backdrop-filter: blur(8px); }
 a.camera-button { display: inline-flex; align-items: center; text-decoration: none; }
@@ -170,6 +198,7 @@ input[type="range"] { width: 100%; accent-color: var(--cyan); }
 .drawer-transport { display: none; }
 .fullscreen-exit { display: none; }
 body.pseudo-fullscreen .stage-wrap { position: fixed; inset: 0; z-index: 25; }
+body.pseudo-fullscreen .topbar { position: fixed; top: 0; right: 0; left: 0; z-index: 35; }
 body.pseudo-fullscreen .transport { position: fixed; bottom: 0; left: 0; right: 0; z-index: 36; }
 body.pseudo-fullscreen .fullscreen-exit { display: block; position: absolute; top: 14px; left: 14px; z-index: 10; background: var(--panel); }
 body.pseudo-fullscreen .stage-heading { top: 72px; }
@@ -311,6 +340,13 @@ input[type="range"] { min-height: 32px; }
 
   .stage-heading { display: none; }
   .scale-badge { display: none; }
+  .view-switch { padding: 2px; }
+  .view-switch button { min-height: 30px; padding: 4px 7px; font-size: .62rem; }
+  .observer-panel { top: 6px; width: min(260px, calc(100% - 130px)); }
+  .observer-eclipse-preview { right: 7px; bottom: 10px; width: 121px; }
+  .observer-eclipse-preview canvas { width: 104px; height: 104px; }
+  .observer-targets { top: auto; bottom: 7px; left: 7px; }
+  .observer-targets button { min-height: 37px; padding: 4px 7px; font-size: .6rem; }
 
   .inset-toggle:not([hidden]) { position: absolute; top: 48px; right: 8px; z-index: 7; display: block; min-height: 42px; padding: 7px 10px; border: 1px solid rgba(85,217,208,.35); border-radius: 999px; color: var(--cyan); background: rgba(5, 16, 21, .9); font-size: .62rem; cursor: pointer; }
   .scene-inset { display: none; }
