@@ -152,6 +152,7 @@ export function createStage(
       controls.update()
     }
     cameraGoal = undefined
+    container.dataset.cameraTransitioning = 'false'
     cameraTracking = Boolean(visual?.cameras.find((preset) => preset.id === currentState?.cameraPreset)?.preserveOrbit)
   })
 
@@ -166,6 +167,7 @@ export function createStage(
       trackedCameraTarget = preset.target.clone()
       const scale = currentState ? visual?.cameraScale?.(currentState) ?? 1 : 1
       cameraGoal = { ...preset, position: preset.position.clone().sub(preset.target).multiplyScalar(scale).add(preset.target), target: preset.target.clone() }
+      container.dataset.cameraTransitioning = 'true'
     }
   }
 
@@ -255,7 +257,10 @@ export function createStage(
       const alpha = reduced ? 1 : 1 - Math.exp(-elapsed * 7)
       camera.position.lerp(cameraGoal.position, alpha)
       controls.target.lerp(cameraGoal.target, alpha)
-      if (camera.position.distanceTo(cameraGoal.position) < .015) cameraGoal = undefined
+      if (camera.position.distanceTo(cameraGoal.position) < .015) {
+        cameraGoal = undefined
+        container.dataset.cameraTransitioning = 'false'
+      }
     }
     controls.update()
     comparisonControls?.update()

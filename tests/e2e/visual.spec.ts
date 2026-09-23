@@ -67,6 +67,7 @@ for (const [scene, preset, camera, timeline, comparisonCamera] of scenarios) {
       }
     }
     await page.evaluate(() => document.fonts.ready)
+    await expect(page.locator('#stage-wrap')).toHaveAttribute('data-camera-transitioning', 'false')
     expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false)
     await expect(page).toHaveScreenshot(`${snapshotName}-model.png`, { animations: 'disabled', maxDiffPixelRatio: .025 })
     await lab.openControls()
