@@ -19,7 +19,7 @@ const developerScenes = new Set(['celestial-sphere', 'tides', 'kepler'])
 for (const [scene, preset, camera, timeline, comparisonCamera] of scenarios) {
   const snapshotName = comparisonCamera ? `${scene}-earth-focus` : camera === 'surface' ? `${scene}-lunar-surface` : camera === 'moon' || camera === 'lunar-disc' ? `${scene}-moon-focus` : scene
   test(`${snapshotName} 固定日期、時間軸、相機的模型與面板`, async ({ page }) => {
-    if (comparisonCamera) test.setTimeout(90_000)
+    test.setTimeout(90_000)
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 })
       Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 })
