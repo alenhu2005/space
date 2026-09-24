@@ -19,8 +19,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -30,13 +30,13 @@ jobs:
       - run: npx playwright install --with-deps chromium firefox webkit
       - name: Chromium, Firefox, WebKit and responsive behavior
         run: npm run test:e2e -- --project=desktop --project=tablet --project=mobile --project=firefox --project=webkit
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: browser-failures-linux
           path: test-results
           retention-days: 14
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.event_name != 'pull_request'
         with:
           path: dist
@@ -46,8 +46,8 @@ jobs:
     # must not be compared against screenshots captured on macOS.
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -55,7 +55,7 @@ jobs:
       - run: npx playwright install chromium
       - name: Six scenes at desktop, tablet and mobile sizes
         run: npm run test:e2e -- --project=visual-desktop --project=visual-tablet --project=visual-mobile
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: visual-failures-macos
@@ -72,4 +72,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
