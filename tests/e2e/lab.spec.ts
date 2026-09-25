@@ -157,7 +157,7 @@ test('手機真實模式的太陽、月相、日月食都可直接調經緯度',
   const lab = new LabPage(page)
   for (const scene of ['sun-path', 'moon-phases', 'eclipses']) {
     await lab.open(`?scene=${scene}&mode=real&view=observer&time=2024-04-08T18%3A42%3A37Z&lat=32.7767&lon=-96.797`)
-    const quick = page.getByRole('region', { name: '真實日期與觀測經緯度快速調整' })
+    const quick = page.getByRole('region', { name: '真實日期與位置快速調整' })
     await expect(quick).toBeVisible()
     await quick.getByLabel('快速南北位置').fill('25.033')
     await quick.getByLabel('快速南北位置').press('Tab')
