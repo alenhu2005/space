@@ -1,4 +1,4 @@
-import { discOverlapFraction, classifyLunarShadow, computeShadowGeometry } from './geometry'
+import { discOverlapFraction, classifyLunarShadow, computeShadowGeometry, teachingOrbitPosition, type ShadowGeometry } from './geometry'
 import { horizonDirection, shortestAzimuthTurn } from './local-horizon'
 import type { CartesianVector, HorizontalBodyPosition } from '../services/astronomy-provider'
 
@@ -75,23 +75,30 @@ export function realLunarAppearance(sun: CartesianVector, moon: CartesianVector,
     source: scale(sun), blocker: { x: 0, y: 0, z: 0 }, target: scale(moon),
     sourceRadius: SUN_RADIUS_KM, blockerRadius: EARTH_RADIUS_KM, targetRadius: MOON_RADIUS_KM
   })
+  return lunarAppearance(shadow, moonAltitude)
+}
+
+function lunarAppearance(shadow: ShadowGeometry, moonAltitude: number): LunarAppearance {
   const classified = classifyLunarShadow(shadow)
   const kind = classified === 'miss' || classified === 'annular' ? 'none' : classified
   const coverage = shadow.umbraRadiusKm > 0
-    ? discOverlapFraction(MOON_RADIUS_KM, shadow.umbraRadiusKm, shadow.axisOffsetKm)
+    ? discOverlapFraction(shadow.targetRadiusKm, shadow.umbraRadiusKm, shadow.axisOffsetKm)
     : 0
   return {
     type: 'lunar', kind, visible: moonAltitude >= 0 && kind !== 'none', coverage,
-    umbraRadiusInMoonRadii: Math.max(0, shadow.umbraRadiusKm / MOON_RADIUS_KM),
-    umbraOffsetInMoonRadii: shadow.axisOffsetKm / MOON_RADIUS_KM
+    umbraRadiusInMoonRadii: Math.max(0, shadow.umbraRadiusKm / shadow.targetRadiusKm),
+    umbraOffsetInMoonRadii: shadow.axisOffsetKm / shadow.targetRadiusKm
   }
 }
 
-export function teachingLunarAppearance(moonAltitude: number, eclipseType: number, nodeOffset: number, phaseAngle: number): LunarAppearance {
-  const phaseDistance = Math.abs(((phaseAngle - 180 + 540) % 360) - 180)
-  const umbraRadiusInMoonRadii = 2.2
-  const umbraOffsetInMoonRadii = Math.abs(nodeOffset) / 50 * 2.6 + phaseDistance * 2
-  const coverage = eclipseType >= 3 ? discOverlapFraction(1, umbraRadiusInMoonRadii, umbraOffsetInMoonRadii) : 0
-  const kind = coverage <= 0 ? 'none' : coverage >= .999 ? 'total' : 'partial'
-  return { type: 'lunar', kind, visible: moonAltitude >= 0 && kind !== 'none', coverage, umbraRadiusInMoonRadii, umbraOffsetInMoonRadii }
+export function teachingLunarShadow(phaseAngle: number, nodeOffset: number, inclination: number): ShadowGeometry {
+  return computeShadowGeometry({
+    source: { x: -7.4, y: 0, z: 0 }, blocker: { x: 0, y: 0, z: 0 },
+    target: teachingOrbitPosition(phaseAngle * Math.PI / 180, inclination * Math.PI / 180, nodeOffset * Math.PI / 180, 1.6),
+    sourceRadius: .72, blockerRadius: .66, targetRadius: .25
+  })
+}
+
+export function teachingLunarAppearance(moonAltitude: number, phaseAngle: number, nodeOffset: number, inclination: number): LunarAppearance {
+  return lunarAppearance(teachingLunarShadow(phaseAngle, nodeOffset, inclination), moonAltitude)
 }

@@ -48,6 +48,15 @@ export function teachingInitialSolarTime(localHour: number, timeline: number): n
   return modulo(localHour - timeline * SYNODIC_MONTH_DAYS * 24, 24)
 }
 
+/** Eclipse presets start at local noon (new Moon) or midnight (full Moon). */
+export function teachingEclipseSolarTime(initialHour: number, timeline: number, eclipseType: number): number {
+  return teachingSolarTime(initialHour, timeline - (eclipseType >= 3 ? .5 : 0))
+}
+
+export function teachingInitialEclipseSolarTime(localHour: number, timeline: number, eclipseType: number): number {
+  return teachingInitialSolarTime(localHour, timeline - (eclipseType >= 3 ? .5 : 0))
+}
+
 /**
  * Earth rotation that keeps the selected longitude attached to the surface
  * while placing it at the requested local solar time. The model Sun is -x.

@@ -8,6 +8,8 @@ import {
   observerTimeZone,
   observerClockHour,
   teachingEarthRotation,
+  teachingEclipseSolarTime,
+  teachingInitialEclipseSolarTime,
   teachingInitialSolarTime,
   teachingObserverDirection,
   teachingMoonEvents,
@@ -50,6 +52,17 @@ describe('moon observer helpers', () => {
     expect(sunwardX(12)).toBeCloseTo(-Math.cos(24.7733 * Math.PI / 180), 10)
     expect(sunwardX(0)).toBeCloseTo(Math.cos(24.7733 * Math.PI / 180), 10)
     expect(sunwardX(6)).toBeCloseTo(0, 10)
+  })
+
+  it('rotates Earth during both eclipse presets while keeping their initial local times', () => {
+    expect(teachingEclipseSolarTime(12, 0, 0)).toBe(12)
+    expect(teachingEclipseSolarTime(0, .5, 3)).toBe(0)
+    expect(teachingEclipseSolarTime(12, .01, 0)).not.toBe(12)
+    expect(teachingEclipseSolarTime(0, .51, 3)).not.toBe(0)
+    for (const [timeline, eclipseType] of [[.01, 0], [.505, 3], [.52, 4]] as const) {
+      const current = teachingEclipseSolarTime(12, timeline, eclipseType)
+      expect(teachingEclipseSolarTime(teachingInitialEclipseSolarTime(current, timeline, eclipseType), timeline, eclipseType)).toBeCloseTo(current, 8)
+    }
   })
 
   it('sets the current teaching clock without changing the selected lunar phase', () => {

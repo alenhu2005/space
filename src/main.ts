@@ -1,7 +1,7 @@
 import './style.css'
 import { moonPhaseFromAngle } from './core/astro-math'
 import { cardinalDirection } from './core/local-horizon'
-import { formatObserverCoordinates, formatSolarHour, teachingInitialSolarTime, teachingSolarTime } from './core/moon-observer'
+import { formatObserverCoordinates, formatSolarHour, teachingEclipseSolarTime, teachingInitialEclipseSolarTime, teachingInitialSolarTime, teachingSolarTime } from './core/moon-observer'
 import type { ObserverEclipseAppearance } from './core/observer-eclipse'
 import { OBSERVER_SCENES, createInitialState, parseUrlState, simulationReducer, toUrlSearchParams, type SimulationAction } from './core/state'
 import type { SceneId, SimulationMode, SimulationState } from './core/types'
@@ -509,7 +509,7 @@ function renderObserverInfo(): void {
       : state.sceneId === 'moon-phases'
         ? `教學太陽時 ${formatSolarHour(teachingSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline))} · ${timelineLabel()}`
         : state.sceneId === 'eclipses'
-          ? `教學太陽時 ${formatSolarHour(state.parameters.observerSolarHour ?? 12)} · ${timelineLabel()}`
+          ? `教學太陽時 ${formatSolarHour(teachingEclipseSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline, state.parameters.eclipseType ?? 0))} · ${timelineLabel()}`
           : `教學時間 ${timelineLabel()}${state.sceneId === 'sun-path' ? ` · 緯度 ${(state.parameters.latitude ?? state.observer.latitude).toFixed(1)}°` : ''}`
     observerMetadataKey = metadataKey
   }
@@ -625,7 +625,9 @@ function renderControls(): void {
     const storedValue = state.parameters[slider.key] ?? definition.defaultParameters[slider.key] ?? slider.min
     const value = slider.key === 'observerSolarHour' && state.sceneId === 'moon-phases'
       ? teachingSolarTime(storedValue, state.timeline)
-      : storedValue
+      : slider.key === 'observerSolarHour' && state.sceneId === 'eclipses'
+        ? teachingEclipseSolarTime(storedValue, state.timeline, state.parameters.eclipseType ?? 0)
+        : storedValue
     if (slider.options) return `<label class="field-label control-row">${slider.label}<select class="field-input" id="parameter-${slider.key}" data-parameter="${slider.key}">${slider.options.map((option) => `<option value="${option.value}" ${option.value === value ? 'selected' : ''}>${option.label}</option>`).join('')}</select></label>`
     return `<div class="control-row">
       <label class="control-label" for="parameter-${slider.key}"><span>${slider.label}</span><output class="control-value" data-output="${slider.key}">${slider.key === 'observerSolarHour' ? formatSolarHour(value) : `${value.toFixed(slider.step < .1 ? 2 : 1)}${slider.unit}`}</output></label>
@@ -748,8 +750,10 @@ function renderTransport(): void {
   if (quickTimelineOutput) quickTimelineOutput.value = timelineLabel()
   const quickSpeed = document.querySelector<HTMLSelectElement>('#sun-quick-speed')
   if (quickSpeed) quickSpeed.value = String(state.speed)
-  if (state.sceneId === 'moon-phases' && state.mode === 'teaching') {
-    const localHour = teachingSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline)
+  if ((state.sceneId === 'moon-phases' || state.sceneId === 'eclipses') && state.mode === 'teaching') {
+    const localHour = state.sceneId === 'moon-phases'
+      ? teachingSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline)
+      : teachingEclipseSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline, state.parameters.eclipseType ?? 0)
     const clock = document.querySelector<HTMLInputElement>('#parameter-observerSolarHour')
     if (clock && document.activeElement !== clock) clock.value = String(localHour)
     const clockOutput = document.querySelector<HTMLOutputElement>('[data-output="observerSolarHour"]')
@@ -1019,8 +1023,11 @@ app.addEventListener('input', (event) => {
   }
   if (input.dataset.parameter) {
     const value = Number(input.value)
-    const moonClock = state.sceneId === 'moon-phases' && state.mode === 'teaching' && input.dataset.parameter === 'observerSolarHour'
-    dispatch({ type: 'set-parameter', key: input.dataset.parameter, value: moonClock ? teachingInitialSolarTime(value, state.timeline) : value }, false)
+    const teachingClock = state.mode === 'teaching' && input.dataset.parameter === 'observerSolarHour'
+    const initialHour = teachingClock && state.sceneId === 'moon-phases' ? teachingInitialSolarTime(value, state.timeline)
+      : teachingClock && state.sceneId === 'eclipses' ? teachingInitialEclipseSolarTime(value, state.timeline, state.parameters.eclipseType ?? 0)
+      : value
+    dispatch({ type: 'set-parameter', key: input.dataset.parameter, value: initialHour }, false)
     document.querySelectorAll('[data-preset]').forEach((button) => button.setAttribute('aria-pressed', 'false'))
     const output = document.querySelector<HTMLOutputElement>(`[data-output="${input.dataset.parameter}"]`)
     if (output) output.value = input.dataset.parameter === 'observerSolarHour' ? formatSolarHour(value) : `${value}${input.dataset.unit ?? ''}`

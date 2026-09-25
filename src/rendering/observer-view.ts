@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { degreesToRadians, horizontalCoordinates } from '../core/astro-math'
 import { horizonDirection } from '../core/local-horizon'
-import { teachingSolarTime } from '../core/moon-observer'
+import { teachingEclipseSolarTime, teachingSolarTime } from '../core/moon-observer'
 import { realLunarAppearance, realSolarAppearance, teachingLunarAppearance, teachingSolarAppearance, type ObserverEclipseAppearance } from '../core/observer-eclipse'
 import type { SimulationState } from '../core/types'
 import { BRIGHT_STARS } from '../data/bright-stars'
@@ -212,7 +212,7 @@ export function createObserverView(astronomy: AstronomyProvider, moonTextureUrl:
     const hour = state.sceneId === 'moon-phases'
       ? teachingSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline)
       : state.sceneId === 'sun-path' ? state.timeline * 24
-      : state.sceneId === 'eclipses' ? state.parameters.observerSolarHour ?? 12
+      : state.sceneId === 'eclipses' ? teachingEclipseSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline, state.parameters.eclipseType ?? 0)
       : 12
     const seasonAngle = state.parameters.seasonAngle ?? 0
     const declination = Math.asin(Math.sin(degreesToRadians(23.44)) * Math.sin(degreesToRadians(seasonAngle))) * 180 / Math.PI
@@ -306,7 +306,7 @@ export function createObserverView(astronomy: AstronomyProvider, moonTextureUrl:
         } else {
           currentEclipse = state.mode === 'real'
             ? realLunarAppearance(astronomy.geocentricVector('Sun', instant), astronomy.geocentricVector('Moon', instant), moonPosition.altitude)
-            : teachingLunarAppearance(moonPosition.altitude, state.parameters.eclipseType ?? 3, state.parameters.nodeOffset ?? 0, phaseAngle)
+            : teachingLunarAppearance(moonPosition.altitude, phaseAngle, state.parameters.nodeOffset ?? 0, state.parameters.inclination ?? 25)
         }
       }
       const solarEclipse = currentEclipse?.type === 'solar' ? currentEclipse : undefined

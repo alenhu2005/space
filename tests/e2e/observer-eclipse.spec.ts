@@ -64,6 +64,27 @@ test('真實月食的食象和所在地月亮升落一致', async ({ page }, tes
   await expect(page.locator('#observer-eclipse-status')).toContainText('所在地月全食')
 })
 
+test('教學月食在月球仍位於本影時，地面與太空視角一致', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await openEclipse(page, 'mode=teaching&preset=total-lunar&t=0.505')
+  const preview = page.locator('#observer-eclipse-preview')
+  await expect(preview).toHaveAttribute('data-kind', 'total')
+  await expect(preview).toHaveAttribute('data-visible', 'true')
+  await expect(page.locator('#observer-time-label')).not.toContainText('00:00')
+  await page.locator('[data-view="space"]').click()
+  await expect(page.locator('#metrics')).toContainText('全食')
+})
+
+test('教學日食播放時間會帶動地球自轉與觀測時刻', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop')
+  await openEclipse(page, 'mode=teaching&preset=total-solar&t=0')
+  const clock = page.locator('#observer-time-label')
+  await expect(clock).toContainText('12:00')
+  await page.locator('#timeline').fill('0.005')
+  await expect(clock).not.toContainText('12:00')
+  await expect(page.locator('[data-output="observerSolarHour"]')).not.toHaveText('12:00')
+})
+
 test('教學日食月球沿天空移動，觀測時刻可獨立調整', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop')
   await openEclipse(page, 'mode=teaching&preset=annular-solar&t=0&az=180&alt=65')

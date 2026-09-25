@@ -2,6 +2,15 @@ import { normalizeDegrees } from './astro-math'
 
 export interface PhysicalVector { readonly x: number; readonly y: number; readonly z: number }
 
+export function teachingOrbitPosition(longitude: number, inclination: number, node: number, radius: number): PhysicalVector {
+  const latitude = Math.atan(Math.tan(inclination) * Math.sin(longitude - node))
+  return {
+    x: -Math.cos(longitude) * Math.cos(latitude) * radius,
+    y: Math.sin(latitude) * radius,
+    z: Math.sin(longitude) * Math.cos(latitude) * radius
+  }
+}
+
 /** All coordinates and radii are kilometres in one common Cartesian frame. */
 export interface ShadowGeometryInput {
   readonly source: PhysicalVector

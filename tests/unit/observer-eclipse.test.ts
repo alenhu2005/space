@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { realLunarAppearance, realSolarAppearance, teachingLunarAppearance, teachingSolarAppearance } from '../../src/core/observer-eclipse'
+import { realLunarAppearance, realSolarAppearance, teachingLunarAppearance, teachingLunarShadow, teachingSolarAppearance } from '../../src/core/observer-eclipse'
+import { classifyLunarShadow } from '../../src/core/geometry'
 import { createAstronomyProvider } from '../../src/services/astronomy-provider'
 
 describe('observer eclipse appearance', () => {
@@ -25,8 +26,18 @@ describe('observer eclipse appearance', () => {
     const outsidePenumbra = { ...sun, altitude: 20 }
     expect(teachingSolarAppearance(outsidePenumbra, outsidePenumbra, 2, 0, 25).kind).toBe('none')
     expect(teachingSolarAppearance(outsidePenumbra, outsidePenumbra, 0, 0, 25).visible).toBe(false)
-    expect(teachingLunarAppearance(65, 3, 0, 180).kind).toBe('total')
-    expect(teachingLunarAppearance(65, 4, 50, 180).kind).toBe('partial')
+    expect(teachingLunarAppearance(65, 180, 0, 25).kind).toBe('total')
+    expect(teachingLunarAppearance(65, 180, 50, 25).kind).toBe('partial')
+  })
+
+  it('keeps the ground view eclipsed throughout the space-view umbra crossing', () => {
+    for (const phase of [180, 181.8, 187.2]) {
+      const shadow = teachingLunarShadow(phase, 0, 25)
+      const ground = teachingLunarAppearance(65, phase, 0, 25)
+      expect(ground.kind).toBe(classifyLunarShadow(shadow))
+      expect(ground.coverage).toBeGreaterThan(0)
+      expect(ground.visible).toBe(true)
+    }
   })
 
   it('checks observer-specific totality and the night-side non-visibility', () => {

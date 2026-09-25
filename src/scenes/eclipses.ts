@@ -1,7 +1,8 @@
 import * as THREE from 'three'
-import { classifySolarShadow, classifyLunarShadow, computeShadowGeometry, shadowRadius, type ShadowGeometry } from '../core/geometry'
+import { classifySolarShadow, classifyLunarShadow, computeShadowGeometry, shadowRadius, teachingOrbitPosition, type ShadowGeometry } from '../core/geometry'
+import { teachingLunarShadow } from '../core/observer-eclipse'
 import { degreesToRadians, radiansToDegrees, moonPhaseFromAngle } from '../core/astro-math'
-import { earthTextureSurfaceDirection, teachingEarthRotation } from '../core/moon-observer'
+import { earthTextureSurfaceDirection, teachingEarthRotation, teachingEclipseSolarTime } from '../core/moon-observer'
 import { COLORS, createSun, createEarth, createMoon, createArrow, createConeBetween, updateConeBetween, lineFromPoints } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, sunAlignedVector, type BuildContext, type SceneVisual } from './shared'
 import { createPhaseDisc } from './moon-disc'
@@ -13,8 +14,8 @@ const SUN_RADIUS = 695700
 const NAMES = { miss: '無食象', total: '全食', partial: '偏食', annular: '環食', penumbral: '半影月食' } as const
 
 function orbitPosition(longitude: number, inclination: number, node: number, radius: number): THREE.Vector3 {
-  const latitude = Math.atan(Math.tan(inclination) * Math.sin(longitude - node))
-  return new THREE.Vector3(-Math.cos(longitude) * Math.cos(latitude), Math.sin(latitude), Math.sin(longitude) * Math.cos(latitude)).multiplyScalar(radius)
+  const position = teachingOrbitPosition(longitude, inclination, node, radius)
+  return new THREE.Vector3(position.x, position.y, position.z)
 }
 
 export function createEclipses(context: BuildContext): SceneVisual {
@@ -238,7 +239,9 @@ export function createEclipses(context: BuildContext): SceneVisual {
         ? realEarthOrientation(instant, realSunVector)
         : new THREE.Quaternion().setFromAxisAngle(
           new THREE.Vector3(0, 1, 0),
-          teachingEarthRotation(state.observer.longitude, parameter(state, context.definition, 'observerSolarHour'))
+          teachingEarthRotation(state.observer.longitude, teachingEclipseSolarTime(
+            parameter(state, context.definition, 'observerSolarHour'), state.timeline, parameter(state, context.definition, 'eclipseType')
+          ))
         ))
       const surface = earthTextureSurfaceDirection(
         real ? state.observer.latitude : parameter(state, context.definition, 'observerLatitude'),
@@ -250,7 +253,9 @@ export function createEclipses(context: BuildContext): SceneVisual {
       observerPointer.setDirection(localObserver)
       observerPointer.setLength(.24, .075, .04)
       observerLabel.position.copy(localObserver.applyQuaternion(earth.quaternion)).multiplyScalar(1.08).add(earth.position)
-      const shadow = computeShadowGeometry({ source, blocker, target, sourceRadius, blockerRadius, targetRadius })
+      const shadow = !real && !solar
+        ? teachingLunarShadow(phaseAngle, parameter(state, context.definition, 'nodeOffset'), parameter(state, context.definition, 'inclination'))
+        : computeShadowGeometry({ source, blocker, target, sourceRadius, blockerRadius, targetRadius })
       const axis = new THREE.Vector3(shadow.axis.x, shadow.axis.y, shadow.axis.z)
       const endDistance = Math.max(targetRadius * 2, shadow.axialDistanceKm + targetRadius * 1.6)
       const at = (behind: number) => mapPosition(blocker.clone().addScaledVector(axis, behind))
