@@ -102,6 +102,9 @@ body.nav-collapsed .scene-number { display: block; font-size: .85rem; }
 .stage-title { margin: 0; font-size: clamp(1.15rem, 2vw, 1.65rem); font-weight: 670; letter-spacing: -.025em; }
 .stage-description { margin: 6px 0 0; color: var(--muted); font-size: .76rem; line-height: 1.5; max-width: 52ch; }
 .scale-badge { position: absolute; top: 17px; right: 16px; z-index: 5; padding: 6px 8px; border: 1px solid rgba(247,185,85,.36); border-radius: 6px; color: var(--amber); background: rgba(24, 16, 5, .72); font: 650 .61rem ui-monospace, monospace; letter-spacing: .06em; backdrop-filter: blur(10px); }
+.hypothesis-badge { position: absolute; top: 18px; left: 50%; z-index: 9; transform: translateX(-50%); padding: 6px 9px; border: 1px solid rgba(247,185,85,.65); border-radius: 6px; color: #ffe1a3; background: rgba(36,20,8,.86); font: 700 .72rem ui-monospace, monospace; white-space: nowrap; pointer-events: none; }
+.hypothesis-badge[hidden] { display: none; }
+.stage-wrap.observer-active .hypothesis-badge { top: 55px; }
 .view-switch { display: flex; flex: none; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5, 14, 19, .9); }
 .view-switch[hidden], .observer-panel[hidden], .observer-eclipse-preview[hidden] { display: none; }
 .view-switch button, .observer-targets button { min-height: 34px; padding: 6px 9px; border: 0; border-radius: 5px; color: var(--muted); background: transparent; cursor: pointer; font-size: .68rem; }
@@ -262,7 +265,7 @@ body.pseudo-fullscreen .control-panel { z-index: 40; }
 .sun-quick-layers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 10px; }
 .sun-quick-toggle[aria-pressed="true"] { color: var(--ink); border-color: rgba(85,217,208,.45); background: var(--cyan-soft); }
 .sun-quick-note { margin: 0 0 10px; color: var(--muted); font-size: .66rem; line-height: 1.5; }
-.sun-quick-real-grid { display: grid; grid-template-columns: minmax(0, 1.8fr) repeat(3, minmax(0, .7fr)); gap: 6px; }
+.sun-quick-real-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr)); gap: 6px; }
 .sun-quick-real-grid label { display: grid; gap: 3px; color: var(--muted); font-size: .58rem; }
 .sun-quick-real-grid input, .sun-quick-real-grid select { min-width: 0; width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: rgba(255,255,255,.035); font-size: .64rem; }
 .scene-inset .phenomenon-caption { margin-top: 4px; color: var(--amber); font-size: .63rem; }
@@ -419,7 +422,7 @@ input[type="range"] { min-height: 32px; }
   .mobile-sun-controls .sun-quick-latitudes { display: flex; gap: 4px; margin-top: 4px; overflow-x: auto; scrollbar-width: none; }
   .mobile-sun-controls .sun-quick-latitudes::-webkit-scrollbar { display: none; }
   .mobile-sun-controls .sun-quick-latitudes button { flex: 0 0 auto; min-width: 48px; min-height: 30px; padding: 3px 7px; font-size: .58rem; }
-  .mobile-sun-controls .sun-quick-real-grid { grid-template-columns: 1.7fr repeat(3, minmax(0, .7fr)); }
+  .mobile-sun-controls .sun-quick-real-grid { grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr)); }
   .mobile-sun-controls .sun-quick-real-grid input, .mobile-sun-controls .sun-quick-real-grid select { height: 31px; padding: 4px; }
   .sun-path-legend, .earth-light-legend { font-size: .61rem; line-height: 1.35; }
   .control-section { padding: 12px 0; }

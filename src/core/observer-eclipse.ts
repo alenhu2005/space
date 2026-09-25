@@ -1,11 +1,19 @@
 import { discOverlapFraction, classifyLunarShadow, computeShadowGeometry, teachingOrbitPosition, type ShadowGeometry } from './geometry'
 import { horizonDirection, shortestAzimuthTurn } from './local-horizon'
+import { earthTextureSurfaceDirection, teachingEarthRotation } from './moon-observer'
 import type { CartesianVector, HorizontalBodyPosition } from '../services/astronomy-provider'
 
 const AU_KM = 149_597_870.7
 const SUN_RADIUS_KM = 695_700
 const EARTH_RADIUS_KM = 6_378.137
 const MOON_RADIUS_KM = 1_737.4
+
+/** Earth-centred coordinates shared with the teaching eclipse model. */
+export const TEACHING_ECLIPSE = Object.freeze({
+  sunDistance: 7.4, sunRadius: .72, earthRadius: .66,
+  orbitRadius: 1.6, moonRadius: .25,
+  annularOrbitRadius: 2, annularMoonRadius: .13
+})
 
 export interface SkyDisc {
   readonly altitude: number
@@ -57,15 +65,61 @@ export function realSolarAppearance(sun: HorizontalBodyPosition, moon: Horizonta
   return solarDiscs(sun, moon, radius(SUN_RADIUS_KM, sun.distanceAu), radius(MOON_RADIUS_KM, moon.distanceAu))
 }
 
-/** Deliberately enlarged teaching discs, with the node offset moving the Moon off-centre. */
-export function teachingSolarAppearance(sun: SkyDisc, moon: SkyDisc, eclipseType: number, nodeOffset: number, inclination: number): SolarAppearance {
-  const moonRadius = eclipseType === 2 ? .77 : eclipseType === 0 ? 1.25 : 1.02
-  // The teaching shadow axis meets the subsolar equator. The teaching discs
-  // are about four times their real angular size, so scale lunar parallax too;
-  // otherwise nearly every daylight location falsely lies in the penumbra.
-  const offset = Math.sin(nodeOffset * Math.PI / 180) * Math.min(1.35, inclination * .052)
-    - Math.sin((90 - sun.altitude) * Math.PI / 180) * 3.7
-  return solarDiscs(sun, { altitude: moon.altitude + offset, azimuth: moon.azimuth }, 1.08, moonRadius)
+/** The same rays used by the space view, projected from the marked Earth location. */
+export function teachingSolarView(
+  phaseAngle: number, latitude: number, longitude: number, solarHour: number,
+  eclipseType: number, nodeOffset: number, inclination: number
+): { readonly sun: SkyDisc; readonly moon: SkyDisc; readonly appearance: SolarAppearance } {
+  type Vector = { readonly x: number; readonly y: number; readonly z: number }
+  const dot = (a: Vector, b: Vector) => a.x * b.x + a.y * b.y + a.z * b.z
+  const unit = (v: Vector): Vector => {
+    const length = Math.hypot(v.x, v.y, v.z)
+    return { x: v.x / length, y: v.y / length, z: v.z / length }
+  }
+  const onEarth = earthTextureSurfaceDirection(latitude, longitude)
+  const rotation = teachingEarthRotation(longitude, solarHour)
+  const up = unit({
+    x: onEarth.x * Math.cos(rotation) + onEarth.z * Math.sin(rotation),
+    y: onEarth.y,
+    z: -onEarth.x * Math.sin(rotation) + onEarth.z * Math.cos(rotation)
+  })
+  const north = Math.abs(up.y) > .999999 ? { x: 1, y: 0, z: 0 }
+    : unit({ x: -up.x * up.y, y: 1 - up.y * up.y, z: -up.z * up.y })
+  const east = { x: north.y * up.z - north.z * up.y, y: north.z * up.x - north.x * up.z, z: north.x * up.y - north.y * up.x }
+  const orbit = teachingOrbitPosition(phaseAngle * Math.PI / 180, inclination * Math.PI / 180, nodeOffset * Math.PI / 180,
+    eclipseType === 2 ? TEACHING_ECLIPSE.annularOrbitRadius : TEACHING_ECLIPSE.orbitRadius)
+  const sightline = (body: Vector) => unit({
+    x: body.x - up.x * TEACHING_ECLIPSE.earthRadius,
+    y: body.y - up.y * TEACHING_ECLIPSE.earthRadius,
+    z: body.z - up.z * TEACHING_ECLIPSE.earthRadius
+  })
+  const sunBody = { x: -TEACHING_ECLIPSE.sunDistance, y: 0, z: 0 }
+  const sunRay = sightline(sunBody)
+  const moonRay = sightline(orbit)
+  const sunDistance = Math.hypot(sunBody.x - up.x * TEACHING_ECLIPSE.earthRadius, up.y * TEACHING_ECLIPSE.earthRadius, up.z * TEACHING_ECLIPSE.earthRadius)
+  const moonDistance = Math.hypot(orbit.x - up.x * TEACHING_ECLIPSE.earthRadius, orbit.y - up.y * TEACHING_ECLIPSE.earthRadius, orbit.z - up.z * TEACHING_ECLIPSE.earthRadius)
+  const actualSunRadius = Math.asin(TEACHING_ECLIPSE.sunRadius / sunDistance) * 180 / Math.PI
+  const actualMoonRadius = Math.asin((eclipseType === 2 ? TEACHING_ECLIPSE.annularMoonRadius : TEACHING_ECLIPSE.moonRadius) / moonDistance) * 180 / Math.PI
+  // Compress the oversized model's angular scale uniformly; overlap stays unchanged.
+  const displayScale = 1.08 / actualSunRadius
+  const separation = Math.acos(Math.max(-1, Math.min(1, dot(sunRay, moonRay))))
+  const tangent = separation > 1e-8 ? unit({
+    x: moonRay.x - sunRay.x * Math.cos(separation),
+    y: moonRay.y - sunRay.y * Math.cos(separation),
+    z: moonRay.z - sunRay.z * Math.cos(separation)
+  }) : { x: 0, y: 0, z: 0 }
+  const displayMoon = unit({
+    x: sunRay.x * Math.cos(separation * displayScale) + tangent.x * Math.sin(separation * displayScale),
+    y: sunRay.y * Math.cos(separation * displayScale) + tangent.y * Math.sin(separation * displayScale),
+    z: sunRay.z * Math.cos(separation * displayScale) + tangent.z * Math.sin(separation * displayScale)
+  })
+  const toSky = (ray: Vector): SkyDisc => ({
+    altitude: Math.asin(Math.max(-1, Math.min(1, dot(ray, up)))) * 180 / Math.PI,
+    azimuth: ((Math.atan2(dot(ray, east), dot(ray, north)) * 180 / Math.PI) + 360) % 360
+  })
+  const sun = toSky(sunRay)
+  const moon = toSky(displayMoon)
+  return { sun, moon, appearance: solarDiscs(sun, moon, 1.08, actualMoonRadius * displayScale) }
 }
 
 /** Earth's umbra is global, but the selected observer must have the Moon above the horizon. */
@@ -75,10 +129,10 @@ export function realLunarAppearance(sun: CartesianVector, moon: CartesianVector,
     source: scale(sun), blocker: { x: 0, y: 0, z: 0 }, target: scale(moon),
     sourceRadius: SUN_RADIUS_KM, blockerRadius: EARTH_RADIUS_KM, targetRadius: MOON_RADIUS_KM
   })
-  return lunarAppearance(shadow, moonAltitude)
+  return lunarAppearanceFromShadow(shadow, moonAltitude)
 }
 
-function lunarAppearance(shadow: ShadowGeometry, moonAltitude: number): LunarAppearance {
+export function lunarAppearanceFromShadow(shadow: ShadowGeometry, moonAltitude: number): LunarAppearance {
   const classified = classifyLunarShadow(shadow)
   const kind = classified === 'miss' || classified === 'annular' ? 'none' : classified
   const coverage = shadow.umbraRadiusKm > 0
@@ -93,12 +147,12 @@ function lunarAppearance(shadow: ShadowGeometry, moonAltitude: number): LunarApp
 
 export function teachingLunarShadow(phaseAngle: number, nodeOffset: number, inclination: number): ShadowGeometry {
   return computeShadowGeometry({
-    source: { x: -7.4, y: 0, z: 0 }, blocker: { x: 0, y: 0, z: 0 },
-    target: teachingOrbitPosition(phaseAngle * Math.PI / 180, inclination * Math.PI / 180, nodeOffset * Math.PI / 180, 1.6),
-    sourceRadius: .72, blockerRadius: .66, targetRadius: .25
+    source: { x: -TEACHING_ECLIPSE.sunDistance, y: 0, z: 0 }, blocker: { x: 0, y: 0, z: 0 },
+    target: teachingOrbitPosition(phaseAngle * Math.PI / 180, inclination * Math.PI / 180, nodeOffset * Math.PI / 180, TEACHING_ECLIPSE.orbitRadius),
+    sourceRadius: TEACHING_ECLIPSE.sunRadius, blockerRadius: TEACHING_ECLIPSE.earthRadius, targetRadius: TEACHING_ECLIPSE.moonRadius
   })
 }
 
 export function teachingLunarAppearance(moonAltitude: number, phaseAngle: number, nodeOffset: number, inclination: number): LunarAppearance {
-  return lunarAppearance(teachingLunarShadow(phaseAngle, nodeOffset, inclination), moonAltitude)
+  return lunarAppearanceFromShadow(teachingLunarShadow(phaseAngle, nodeOffset, inclination), moonAltitude)
 }

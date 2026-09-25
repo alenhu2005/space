@@ -17,6 +17,8 @@ import {
   RotateVector,
   Rotation_EQJ_EQD,
   Rotation_EQJ_HOR,
+  Rotation_ECT_EQD,
+  Rotation_EQD_HOR,
   SearchAltitude,
   SearchGlobalSolarEclipse,
   SearchHourAngle,
@@ -95,6 +97,8 @@ export interface SeasonSummary {
 
 export interface AstronomyProvider {
   horizontalPosition(body: SupportedBody, instant: Date, observer: ObserverLocation): HorizontalBodyPosition
+  /** A labelled what-if Moon: retain the real ecliptic longitude, distance and node crossings while changing orbital latitude. */
+  moonAtInclination(instant: Date, observer: ObserverLocation, inclinationDegrees: number): { readonly vector: CartesianVector; readonly horizontal: HorizontalBodyPosition; readonly eclipticLatitude: number }
   heliocentricVector(body: SupportedBody, instant: Date): CartesianVector
   /** Geocentric AU, in true ecliptic-of-date coordinates (ECT). Earth is the origin. */
   geocentricVector(body: SupportedBody, instant: Date): CartesianVector
@@ -239,6 +243,31 @@ export function createAstronomyProvider(): AstronomyProvider {
         rightAscension: equatorial.ra,
         declination: equatorial.dec,
         distanceAu: equatorial.dist
+      }
+    },
+
+    moonAtInclination(instant: Date, observer: ObserverLocation, inclinationDegrees: number) {
+      const vector = this.geocentricVector('Moon', instant)
+      const radius = Math.hypot(vector.x, vector.y, vector.z)
+      const actualLatitude = Math.asin(vector.z / radius)
+      if (Math.abs(inclinationDegrees - 5.145) < 1e-6) {
+        return { vector, horizontal: this.horizontalPosition('Moon', instant, observer), eclipticLatitude: actualLatitude * 180 / Math.PI }
+      }
+      const latitude = Math.asin(Math.max(-1, Math.min(1, Math.sin(actualLatitude) * Math.sin(inclinationDegrees * Math.PI / 180) / Math.sin(5.145 * Math.PI / 180))))
+      const longitude = Math.atan2(vector.y, vector.x)
+      const adjusted = {
+        x: radius * Math.cos(latitude) * Math.cos(longitude),
+        y: radius * Math.cos(latitude) * Math.sin(longitude),
+        z: radius * Math.sin(latitude)
+      }
+      const surface = this.observerVector(instant, observer)
+      const time = MakeTime(instant)
+      const equatorial = RotateVector(Rotation_ECT_EQD(time), new Vector(adjusted.x - surface.x, adjusted.y - surface.y, adjusted.z - surface.z, time))
+      const body = EquatorFromVector(equatorial)
+      const horizontal = HorizonFromVector(RotateVector(Rotation_EQD_HOR(time, toObserver(observer)), equatorial), 'normal')
+      return {
+        vector: adjusted, eclipticLatitude: latitude * 180 / Math.PI,
+        horizontal: { altitude: horizontal.lat, azimuth: horizontal.lon, rightAscension: body.ra, declination: body.dec, distanceAu: body.dist }
       }
     },
 

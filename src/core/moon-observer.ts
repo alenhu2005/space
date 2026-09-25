@@ -48,13 +48,19 @@ export function teachingInitialSolarTime(localHour: number, timeline: number): n
   return modulo(localHour - timeline * SYNODIC_MONTH_DAYS * 24, 24)
 }
 
-/** Eclipse presets start at local noon (new Moon) or midnight (full Moon). */
-export function teachingEclipseSolarTime(initialHour: number, timeline: number, eclipseType: number): number {
-  return teachingSolarTime(initialHour, timeline - (eclipseType >= 3 ? .5 : 0))
+/** Teaching eclipse slider covers the approach, maximum, and departure. */
+export function teachingEclipsePhase(timeline: number, eclipseType: number): number {
+  const phase = eclipseType >= 3 ? 180 + (timeline - .5) * 140 : (timeline - .5) * 70
+  return modulo(phase, 360)
 }
 
-export function teachingInitialEclipseSolarTime(localHour: number, timeline: number, eclipseType: number): number {
-  return teachingInitialSolarTime(localHour, timeline - (eclipseType >= 3 ? .5 : 0))
+/** Preset maximum is local noon for solar and midnight for lunar eclipses. */
+export function teachingEclipseSolarTime(initialHour: number, timeline: number, _eclipseType: number): number {
+  return modulo(initialHour + (timeline - .5) * 12, 24)
+}
+
+export function teachingInitialEclipseSolarTime(localHour: number, timeline: number, _eclipseType: number): number {
+  return modulo(localHour - (timeline - .5) * 12, 24)
 }
 
 /**

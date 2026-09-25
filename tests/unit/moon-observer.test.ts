@@ -9,6 +9,7 @@ import {
   observerClockHour,
   teachingEarthRotation,
   teachingEclipseSolarTime,
+  teachingEclipsePhase,
   teachingInitialEclipseSolarTime,
   teachingInitialSolarTime,
   teachingObserverDirection,
@@ -55,10 +56,14 @@ describe('moon observer helpers', () => {
   })
 
   it('rotates Earth during both eclipse presets while keeping their initial local times', () => {
-    expect(teachingEclipseSolarTime(12, 0, 0)).toBe(12)
+    expect(teachingEclipseSolarTime(12, .5, 0)).toBe(12)
     expect(teachingEclipseSolarTime(0, .5, 3)).toBe(0)
-    expect(teachingEclipseSolarTime(12, .01, 0)).not.toBe(12)
+    expect(teachingEclipseSolarTime(12, .1, 0)).toBeCloseTo(7.2)
     expect(teachingEclipseSolarTime(0, .51, 3)).not.toBe(0)
+    expect(teachingEclipsePhase(.5, 0)).toBe(0)
+    expect(teachingEclipsePhase(.5, 3)).toBe(180)
+    expect(teachingEclipsePhase(.1, 0)).toBe(332)
+    expect(teachingEclipsePhase(.1, 3)).toBe(124)
     for (const [timeline, eclipseType] of [[.01, 0], [.505, 3], [.52, 4]] as const) {
       const current = teachingEclipseSolarTime(12, timeline, eclipseType)
       expect(teachingEclipseSolarTime(teachingInitialEclipseSolarTime(current, timeline, eclipseType), timeline, eclipseType)).toBeCloseTo(current, 8)

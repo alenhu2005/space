@@ -7,7 +7,7 @@ const scenarios = [
   ['sun-path', 'june-solstice', 'horizon', 0.5, 'earth'],
   ['moon-phases', 'first-quarter', 'angled', 0.25],
   ['moon-phases', 'first-quarter', 'moon', 0.25],
-  ['eclipses', 'total-solar', 'side', 0],
+  ['eclipses', 'total-solar', 'side', 0.5],
   ['eclipses', 'total-lunar', 'surface', 0.5],
   ['eclipses', 'total-lunar', 'lunar-disc', 0.5],
   ['tides', 'spring-new', 'top', 0],
@@ -97,9 +97,9 @@ const observerLightCases = [
   ['moon-phases', 'day', 't=0&p.observerSolarHour=12'],
   ['moon-phases', 'dusk', 't=0&p.observerSolarHour=18'],
   ['moon-phases', 'night', 't=0&p.observerSolarHour=22'],
-  ['eclipses', 'day', 't=0&p.observerSolarHour=12'],
-  ['eclipses', 'dusk', 't=0&p.observerSolarHour=18'],
-  ['eclipses', 'night', 't=0&p.observerSolarHour=22']
+  ['eclipses', 'day', 't=0.5&p.observerSolarHour=12'],
+  ['eclipses', 'dusk', 't=0.5&p.observerSolarHour=18'],
+  ['eclipses', 'night', 't=0.5&p.observerSolarHour=22']
 ] as const
 
 for (const [scene, light, parameters] of observerLightCases) {
@@ -138,9 +138,9 @@ for (const [name, azimuth, altitude, timeline, latitude] of [
 }
 
 for (const [name, mode, preset, time, latitude, longitude, timeline, kind, visible] of [
-  ['teaching-total-solar', 'teaching', 'total-solar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, 0, 'total', 'true'],
-  ['teaching-partial-solar', 'teaching', 'partial-solar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, 0, 'partial', 'true'],
-  ['teaching-annular-solar', 'teaching', 'annular-solar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, 0, 'annular', 'true'],
+  ['teaching-total-solar', 'teaching', 'total-solar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, .5, 'total', 'true'],
+  ['teaching-partial-solar', 'teaching', 'partial-solar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, .5, 'partial', 'true'],
+  ['teaching-annular-solar', 'teaching', 'annular-solar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, .5, 'annular', 'true'],
   ['teaching-total-lunar', 'teaching', 'total-lunar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, .5, 'total', 'true'],
   ['teaching-partial-lunar', 'teaching', 'partial-lunar', '2026-09-20T04%3A00%3A00Z', 25.033, 121.5654, .5, 'partial', 'true'],
   ['real-local-total-solar', 'real', 'total-solar', '2024-04-08T18%3A42%3A37Z', 32.7767, -96.797, 0, 'total', 'true'],

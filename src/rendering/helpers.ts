@@ -149,6 +149,12 @@ export function createMoon(radius = 0.28, textureUrl?: string): THREE.Mesh {
   return moon
 }
 
+/** The LRO map's near-side centre is local +X (SphereGeometry U = 0.5). */
+export function orientMoonNearSide(moon: THREE.Object3D, observer: THREE.Vector3): void {
+  moon.lookAt(observer)
+  moon.rotateY(-Math.PI / 2)
+}
+
 export function createArrow(direction: THREE.Vector3, origin: THREE.Vector3, length: number, color: number): THREE.ArrowHelper {
   return new THREE.ArrowHelper(direction.clone().normalize(), origin, length, color, Math.min(.18, length * .25), Math.min(.1, length * .14))
 }

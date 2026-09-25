@@ -14,7 +14,7 @@ import {
   teachingMoonEvents,
   teachingSolarTime
 } from '../core/moon-observer'
-import { COLORS, ring, createSun, createEarth, createMoon, createArrow } from '../rendering/helpers'
+import { COLORS, ring, createSun, createEarth, createMoon, createArrow, orientMoonNearSide } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, sunAlignedVector, type BuildContext, type SceneVisual } from './shared'
 import { createPhaseDisc } from './moon-disc'
 
@@ -74,6 +74,7 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
     position: new THREE.Vector3(), target: new THREE.Vector3()
   }
   let realEventKey = ''
+  let realEventValidUntil = Infinity
   let realEventSchedule = { rise: '', transit: '', set: '' }
 
   function realEarthOrientation(instant: Date, sunVector: { readonly x: number; readonly y: number }): THREE.Quaternion {
@@ -89,8 +90,9 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
 
   function realEventsFor(state: SimulationState, zone: string): typeof realEventSchedule {
     const key = `${state.instant.slice(0, 13)}-${state.observer.latitude}-${state.observer.longitude}-${zone}`
-    if (key !== realEventKey) {
+    if (key !== realEventKey || new Date(state.instant).getTime() >= realEventValidUntil) {
       const events = context.astronomy.riseSet('Moon', new Date(state.instant), state.observer)
+      realEventValidUntil = Math.min(events.rise?.getTime() ?? Infinity, events.transit.getTime(), events.set?.getTime() ?? Infinity)
       realEventSchedule = {
         rise: formatObserverEventTime(events.rise, zone),
         transit: formatObserverEventTime(events.transit, zone),
@@ -132,7 +134,7 @@ export function createMoonPhases(context: BuildContext): SceneVisual {
       if (state.mode === 'real') {
         moon.position.copy(sunAlignedVector(physicalMoon!, physicalSun!).normalize().multiplyScalar(orbitRadius))
       }
-      moon.lookAt(earth.position)
+      orientMoonNearSide(moon, earth.position)
       moonCamera.position.copy(moon.position).add(new THREE.Vector3(0, .65, 2.2))
       moonCamera.target.copy(moon.position)
       moonLabel.position.copy(moon.position).add(new THREE.Vector3(0, trueScale ? .22 : .55, 0))

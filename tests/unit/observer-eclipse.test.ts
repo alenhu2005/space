@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { realLunarAppearance, realSolarAppearance, teachingLunarAppearance, teachingLunarShadow, teachingSolarAppearance } from '../../src/core/observer-eclipse'
+import { realLunarAppearance, realSolarAppearance, teachingLunarAppearance, teachingLunarShadow, teachingSolarView } from '../../src/core/observer-eclipse'
 import { classifyLunarShadow } from '../../src/core/geometry'
 import { createAstronomyProvider } from '../../src/services/astronomy-provider'
 
@@ -18,14 +18,16 @@ describe('observer eclipse appearance', () => {
   })
 
   it('shows the intended teaching total, annular, partial and lunar presets', () => {
-    const overhead = { ...sun, altitude: 90 }
-    expect(teachingSolarAppearance(overhead, overhead, 0, 0, 25).kind).toBe('total')
-    expect(teachingSolarAppearance(overhead, overhead, 2, 0, 25).kind).toBe('annular')
-    expect(teachingSolarAppearance(sun, sun, 2, 0, 25).kind).toBe('partial')
-    expect(teachingSolarAppearance(sun, sun, 1, 90, 25).kind).toBe('partial')
-    const outsidePenumbra = { ...sun, altitude: 20 }
-    expect(teachingSolarAppearance(outsidePenumbra, outsidePenumbra, 2, 0, 25).kind).toBe('none')
-    expect(teachingSolarAppearance(outsidePenumbra, outsidePenumbra, 0, 0, 25).visible).toBe(false)
+    const view = (latitude: number, solarHour: number, type: number, node = 0, phase = 0) =>
+      teachingSolarView(phase, latitude, 121.5654, solarHour, type, node, 25).appearance
+    expect(view(0, 12, 0).kind).toBe('total')
+    expect(view(0, 12, 2).kind).toBe('annular')
+    expect(view(10, 12, 2).kind).toBe('partial')
+    expect(view(70, 12, 2).kind).toBe('none')
+    expect(view(-40, 12, 1, 90).kind).toBe('partial')
+    expect(view(70, 12, 0).kind).toBe('none')
+    expect(view(0, 0, 0).visible).toBe(false)
+    expect(view(0, 12, 0, 90).kind).toBe('none')
     expect(teachingLunarAppearance(65, 180, 0, 25).kind).toBe('total')
     expect(teachingLunarAppearance(65, 180, 50, 25).kind).toBe('partial')
   })

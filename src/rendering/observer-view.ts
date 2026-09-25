@@ -1,12 +1,12 @@
 import * as THREE from 'three'
 import { degreesToRadians, horizontalCoordinates } from '../core/astro-math'
 import { horizonDirection } from '../core/local-horizon'
-import { teachingEclipseSolarTime, teachingSolarTime } from '../core/moon-observer'
-import { realLunarAppearance, realSolarAppearance, teachingLunarAppearance, teachingSolarAppearance, type ObserverEclipseAppearance } from '../core/observer-eclipse'
+import { teachingEclipsePhase, teachingEclipseSolarTime, teachingSolarTime } from '../core/moon-observer'
+import { realLunarAppearance, realSolarAppearance, teachingLunarAppearance, teachingSolarView, type ObserverEclipseAppearance } from '../core/observer-eclipse'
 import type { SimulationState } from '../core/types'
 import { BRIGHT_STARS } from '../data/bright-stars'
 import type { AstronomyProvider } from '../services/astronomy-provider'
-import { COLORS, createLabel, createMoon, createSun, disposeObject, lineFromPoints, ring } from './helpers'
+import { COLORS, createLabel, createMoon, createSun, disposeObject, lineFromPoints, ring, orientMoonNearSide } from './helpers'
 
 export interface SkyPosition { readonly altitude: number; readonly azimuth: number }
 
@@ -217,13 +217,15 @@ export function createObserverView(astronomy: AstronomyProvider, moonTextureUrl:
     const seasonAngle = state.parameters.seasonAngle ?? 0
     const declination = Math.asin(Math.sin(degreesToRadians(23.44)) * Math.sin(degreesToRadians(seasonAngle))) * 180 / Math.PI
     sunPosition = horizontalCoordinates((hour - 12) * 15, declination, latitude)
-    const phaseAngle = state.sceneId === 'moon-phases' || state.sceneId === 'eclipses' ? state.timeline * 360 : astronomy.moonPhaseAngle(new Date(state.instant))
+    const phaseAngle = state.sceneId === 'eclipses' ? teachingEclipsePhase(state.timeline, state.parameters.eclipseType ?? 0)
+      : state.sceneId === 'moon-phases' ? state.timeline * 360 : astronomy.moonPhaseAngle(new Date(state.instant))
     moonPosition = horizontalCoordinates((hour - 12) * 15 - phaseAngle, 0, latitude)
   }
 
   function updateTrails(state: SimulationState, instant: Date): void {
     const real = state.mode === 'real'
-    const phaseAngle = real ? astronomy.moonPhaseAngle(instant) : state.timeline * 360
+    const phaseAngle = real ? astronomy.moonPhaseAngle(instant)
+      : state.sceneId === 'eclipses' ? teachingEclipsePhase(state.timeline, state.parameters.eclipseType ?? 0) : state.timeline * 360
     const solarEclipse = Math.cos(degreesToRadians(phaseAngle)) > 0
     sunTrail.visible = state.layers.paths && (state.sceneId === 'sun-path' || state.sceneId === 'celestial-sphere' || state.sceneId === 'eclipses' && solarEclipse)
     moonTrail.visible = state.layers.paths && (state.sceneId === 'moon-phases' || state.sceneId === 'eclipses' && !solarEclipse)
@@ -235,7 +237,7 @@ export function createObserverView(astronomy: AstronomyProvider, moonTextureUrl:
     const seasonAngle = state.parameters.seasonAngle ?? 0
     const hourBucket = Math.floor(instant.getTime() / 3_600_000)
     const key = real
-      ? `${state.sceneId}|real|${solarEclipse}|${hourBucket}|${state.observer.latitude}|${state.observer.longitude}`
+      ? `${state.sceneId}|real|${solarEclipse}|${hourBucket}|${state.observer.latitude}|${state.observer.longitude}|${state.sceneId === 'eclipses' ? state.parameters.hypotheticalInclination ?? 5.145 : ''}`
       : `${state.sceneId}|teaching|${latitude}|${seasonAngle}|${sunTrail.visible ? 'sun' : 'moon'}`
     if (key === cachedTrailsKey) return
     const declination = Math.asin(Math.sin(degreesToRadians(23.44)) * Math.sin(degreesToRadians(seasonAngle))) * 180 / Math.PI
@@ -245,7 +247,9 @@ export function createObserverView(astronomy: AstronomyProvider, moonTextureUrl:
       const points = Array.from({ length: real ? 145 : 144 }, (_, index) => {
         const hour = index / 6
         const position = real
-          ? astronomy.horizontalPosition(body, new Date(centerTime + (index - 72) * 600_000), state.observer)
+          ? body === 'Moon' && state.sceneId === 'eclipses'
+            ? astronomy.moonAtInclination(new Date(centerTime + (index - 72) * 600_000), state.observer, state.parameters.hypotheticalInclination ?? 5.145).horizontal
+            : astronomy.horizontalPosition(body, new Date(centerTime + (index - 72) * 600_000), state.observer)
           : body === 'Sun'
             ? horizontalCoordinates((hour - 12) * 15, declination, latitude)
             : horizontalCoordinates((hour - 12) * 15, 0, latitude)
@@ -292,33 +296,41 @@ export function createObserverView(astronomy: AstronomyProvider, moonTextureUrl:
       let realMoon: ReturnType<AstronomyProvider['horizontalPosition']> | undefined
       if (state.mode === 'real') {
         realSun = astronomy.horizontalPosition('Sun', instant, state.observer)
-        realMoon = astronomy.horizontalPosition('Moon', instant, state.observer)
+        realMoon = state.sceneId === 'eclipses'
+          ? astronomy.moonAtInclination(instant, state.observer, state.parameters.hypotheticalInclination ?? 5.145).horizontal
+          : astronomy.horizontalPosition('Moon', instant, state.observer)
         sunPosition = realSun
         moonPosition = realMoon
       } else teachingPositions(state)
       currentEclipse = undefined
       if (state.sceneId === 'eclipses') {
-        const phaseAngle = state.mode === 'real' ? astronomy.moonPhaseAngle(instant) : state.timeline * 360
+        const phaseAngle = state.mode === 'real' ? astronomy.moonPhaseAngle(instant) : teachingEclipsePhase(state.timeline, state.parameters.eclipseType ?? 0)
         if (Math.cos(degreesToRadians(phaseAngle)) > 0) {
-          currentEclipse = state.mode === 'real'
-            ? realSolarAppearance(realSun!, realMoon!)
-            : teachingSolarAppearance(sunPosition, moonPosition, state.parameters.eclipseType ?? 0, state.parameters.nodeOffset ?? 0, state.parameters.inclination ?? 25)
+          if (state.mode === 'real') currentEclipse = realSolarAppearance(realSun!, realMoon!)
+          else {
+            const view = teachingSolarView(phaseAngle, state.parameters.observerLatitude ?? 0, state.observer.longitude,
+              teachingEclipseSolarTime(state.parameters.observerSolarHour ?? 12, state.timeline, state.parameters.eclipseType ?? 0),
+              state.parameters.eclipseType ?? 0, state.parameters.nodeOffset ?? 0, state.parameters.inclination ?? 25)
+            sunPosition = view.sun
+            moonPosition = view.moon
+            currentEclipse = view.appearance
+          }
         } else {
           currentEclipse = state.mode === 'real'
-            ? realLunarAppearance(astronomy.geocentricVector('Sun', instant), astronomy.geocentricVector('Moon', instant), moonPosition.altitude)
+            ? realLunarAppearance(astronomy.geocentricVector('Sun', instant), astronomy.moonAtInclination(instant, state.observer, state.parameters.hypotheticalInclination ?? 5.145).vector, moonPosition.altitude)
             : teachingLunarAppearance(moonPosition.altitude, phaseAngle, state.parameters.nodeOffset ?? 0, state.parameters.inclination ?? 25)
         }
       }
       const solarEclipse = currentEclipse?.type === 'solar' ? currentEclipse : undefined
       const lunarEclipse = currentEclipse?.type === 'lunar' ? currentEclipse : undefined
-      if (solarEclipse && state.mode === 'teaching') moonPosition = { ...moonPosition, altitude: sunPosition.altitude + solarEclipse.moonOffsetYDegrees }
+      zenith.visible = state.layers.labels && state.sceneId !== 'eclipses'
       sun.scale.setScalar(solarEclipse && state.mode === 'real' ? 85 * Math.tan(degreesToRadians(solarEclipse.sunRadiusDegrees)) / 1.6 : 1)
       sun.position.copy(direction(sunPosition.altitude, sunPosition.azimuth))
       moon.position.copy(direction(moonPosition.altitude, moonPosition.azimuth, solarEclipse ? 84.5 : 85))
       moon.scale.setScalar(solarEclipse
         ? 85 * Math.tan(degreesToRadians(solarEclipse.moonRadiusDegrees)) / 1.5
         : state.sceneId === 'moon-phases' ? 1.6 : lunarEclipse ? 1.35 : 1)
-      moon.lookAt(0, 0, 0)
+      orientMoonNearSide(moon, new THREE.Vector3())
       const moonMaterial = moon.material as THREE.MeshStandardMaterial
       moonMaterial.color.setHex(lunarEclipse?.visible && lunarEclipse.coverage > .95 ? 0xb86857 : 0xffffff)
       moonMaterial.emissive.setHex(lunarEclipse?.visible && lunarEclipse.coverage > .95 ? 0x38150e : 0x000000)

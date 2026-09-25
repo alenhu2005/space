@@ -1,7 +1,7 @@
 import './style.css'
 import { moonPhaseFromAngle } from './core/astro-math'
 import { cardinalDirection } from './core/local-horizon'
-import { formatObserverCoordinates, formatSolarHour, teachingEclipseSolarTime, teachingInitialEclipseSolarTime, teachingInitialSolarTime, teachingSolarTime } from './core/moon-observer'
+import { formatObserverCoordinates, formatSolarHour, teachingEclipsePhase, teachingEclipseSolarTime, teachingInitialEclipseSolarTime, teachingInitialSolarTime, teachingSolarTime } from './core/moon-observer'
 import type { ObserverEclipseAppearance } from './core/observer-eclipse'
 import { OBSERVER_SCENES, createInitialState, parseUrlState, simulationReducer, toUrlSearchParams, type SimulationAction } from './core/state'
 import type { SceneId, SimulationMode, SimulationState } from './core/types'
@@ -49,6 +49,7 @@ app.innerHTML = `
           <p class="stage-description" id="stage-description"></p>
         </div>
         <div class="scale-badge" id="scale-badge">教學示意・非等比例</div>
+        <div class="hypothesis-badge" id="hypothesis-badge" role="status" hidden>傾角假設・非真實天象</div>
         <div class="observer-panel" id="observer-panel" aria-label="觀看方位" hidden>
           <div class="observer-bearing">
             <div class="observer-bearing-current"><strong id="observer-cardinal"></strong><span id="observer-azimuth"></span></div>
@@ -82,7 +83,7 @@ app.innerHTML = `
       </aside>
     </main>
 
-    <section class="sun-quick-controls mobile-sun-controls" id="mobile-sun-controls" aria-label="太陽模型快速調整" hidden></section>
+    <section class="sun-quick-controls mobile-sun-controls" id="mobile-sun-controls" aria-label="模型快速調整" hidden></section>
 
     <footer class="transport" aria-label="時間控制">
       <div class="transport-buttons">
@@ -184,6 +185,10 @@ const stage = createStage(canvas, stageWrap, astronomy, {
 cameras = stage.setScene(SCENE_BY_ID[state.sceneId])
 stage.setState(state)
 renderAll()
+if (state.mode === 'real' && state.sceneId === 'eclipses' && state.viewMode === 'observer'
+  && !new URLSearchParams(window.location.search).has('az')) {
+  stage.lookAtBody(Math.cos(astronomy.moonPhaseAngle(new Date(state.instant)) * Math.PI / 180) > 0 ? 'Sun' : 'Moon')
+}
 const drawerMedia = window.matchMedia('(max-width: 900px)')
 const phoneMedia = window.matchMedia('(max-width: 560px)')
 function updateSceneNav(): void {
@@ -273,7 +278,7 @@ function initializeState(): SimulationState {
     instant: preset.instant
   })
   const search = new URLSearchParams(window.location.search)
-  let restored = simulationReducer(withPreset, { type: 'set-timeline', timeline: timelineFor(preset.parameters, parsed.timeline) })
+  let restored = simulationReducer(withPreset, { type: 'set-timeline', timeline: preset.timeline ?? timelineFor(preset.parameters, parsed.timeline) })
   if (!cameraIds[parsed.sceneId].includes(parsed.cameraPreset)) restored = { ...restored, cameraPreset: preset.cameraPreset ?? cameraIds[parsed.sceneId][0]! }
   const hiddenBounds: Readonly<Record<string, readonly [number, number]>> = { phase: [0, 360], sidereal: [0, 360], hour: [0, 24], meanAnomaly: [0, 360], eclipseType: [0, 4], viewMode: [0, 2] }
   const keys = new Set([...Object.keys(definition.defaultParameters), ...definition.controls.map((control) => control.key)])
@@ -382,7 +387,7 @@ function selectScene(sceneId: SceneId): void {
       cameraPreset: preset.cameraPreset,
       instant: preset.instant
     })
-    state = simulationReducer(state, { type: 'set-timeline', timeline: timelineFor(preset.parameters, .25) })
+    state = simulationReducer(state, { type: 'set-timeline', timeline: preset.timeline ?? timelineFor(preset.parameters, .25) })
   }
   cameras = stage.setScene(definition)
   stageWrap.classList.remove('inset-open')
@@ -401,7 +406,7 @@ function applyPreset(id: string): void {
     type: 'set-preset', presetId: preset.id, parameters: preset.parameters,
     cameraPreset: preset.cameraPreset, instant: preset.instant
   })
-  state = simulationReducer(state, { type: 'set-timeline', timeline: timelineFor(preset.parameters, state.timeline) })
+  state = simulationReducer(state, { type: 'set-timeline', timeline: preset.timeline ?? timelineFor(preset.parameters, state.timeline) })
   stage.setState(state)
   renderAll()
   syncUrl()
@@ -423,7 +428,7 @@ function resetScene(): void {
     parameters: Object.freeze({ ...presetParameters }),
     cameraPreset: firstPreset?.cameraPreset ?? cameras[0]?.id ?? 'outside',
     presetId: firstPreset?.id ?? '',
-    timeline: timelineFor(presetParameters, .25)
+    timeline: firstPreset?.timeline ?? timelineFor(presetParameters, .25)
   }
   dispatch({ type: 'reset', state: reset })
 }
@@ -467,6 +472,7 @@ function renderAll(): void {
   document.querySelector('#stage-title')!.textContent = definition.title
   document.querySelector('#stage-description')!.textContent = definition.description
   document.querySelector('#scale-badge')!.textContent = state.mode === 'real' ? '真實方向・尺寸非等比例' : '教學示意・非等比例'
+  updateHypothesisBadge()
   renderTopbar()
   renderObserverInfo()
   renderCameras()
@@ -480,6 +486,13 @@ function renderAll(): void {
     const next = focusId ? document.getElementById(focusId) : focusData ? Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => Object.entries(focusData).every(([key, value]) => button.dataset[key] === value)) : undefined
     next?.focus({ preventScroll: true })
   }
+}
+
+function updateHypothesisBadge(): void {
+  const hypothetical = state.mode === 'real' && state.sceneId === 'eclipses' && Math.abs((state.parameters.hypotheticalInclination ?? 5.145) - 5.145) > 1e-6
+  document.querySelector<HTMLElement>('#hypothesis-badge')!.hidden = !hypothetical
+  const reset = document.querySelector<HTMLButtonElement>('[data-action="reset-real-inclination"]')
+  if (reset) reset.disabled = !hypothetical
 }
 
 function renderObserverInfo(): void {
@@ -617,6 +630,7 @@ function renderCameras(): void {
 
 function renderControls(): void {
   const definition = SCENE_BY_ID[state.sceneId]
+  const hypothetical = state.mode === 'real' && state.sceneId === 'eclipses' && Math.abs((state.parameters.hypotheticalInclination ?? 5.145) - 5.145) > 1e-6
   const presetHtml = definition.presets.map((preset) => `
     <button class="preset-button" data-preset="${preset.id}" aria-pressed="${state.mode === 'teaching' && preset.id === state.presetId}">
       <span class="preset-label">${preset.label}</span><span class="preset-desc">${preset.description}</span>
@@ -630,7 +644,7 @@ function renderControls(): void {
         : storedValue
     if (slider.options) return `<label class="field-label control-row">${slider.label}<select class="field-input" id="parameter-${slider.key}" data-parameter="${slider.key}">${slider.options.map((option) => `<option value="${option.value}" ${option.value === value ? 'selected' : ''}>${option.label}</option>`).join('')}</select></label>`
     return `<div class="control-row">
-      <label class="control-label" for="parameter-${slider.key}"><span>${slider.label}</span><output class="control-value" data-output="${slider.key}">${slider.key === 'observerSolarHour' ? formatSolarHour(value) : `${value.toFixed(slider.step < .1 ? 2 : 1)}${slider.unit}`}</output></label>
+      <label class="control-label" for="parameter-${slider.key}"><span>${slider.label}</span><output class="control-value" data-output="${slider.key}">${slider.key === 'observerSolarHour' ? formatSolarHour(value) : `${value.toFixed(slider.step < .01 ? 3 : slider.step < .1 ? 2 : 1)}${slider.unit}`}</output></label>
       <input type="range" id="parameter-${slider.key}" data-parameter="${slider.key}" data-unit="${slider.unit}" min="${slider.min}" max="${slider.max}" step="${slider.step}" value="${value}" />
     </div>`
   }
@@ -643,6 +657,8 @@ function renderControls(): void {
   const seasonActions = state.sceneId === 'sun-path' && state.mode === 'real' ? `<section class="control-section" data-control-group="model"><p class="section-kicker">${new Date(state.instant).getUTCFullYear()} 年分至點</p><div class="action-row">${[['marchEquinox', '春分'], ['juneSolstice', '夏至'], ['septemberEquinox', '秋分'], ['decemberSolstice', '冬至']].map(([key, name]) => `<button class="ghost-button" data-season="${key}">${name}</button>`).join('')}</div></section>` : ''
 
   const eclipseActions = state.sceneId === 'eclipses' && state.mode === 'real' ? `
+    <div class="control-section" data-control-group="model"><p class="inline-status">調整「假設月軌傾角」會保留真實日期與月球黃經，但改變月球黃緯；結果是推演示意，不是該日真實天象。交點附近即使改傾角，仍可能發生日月食。</p>
+      <button class="ghost-button" data-action="reset-real-inclination" ${hypothetical ? '' : 'disabled'}>回到真實傾角 5.145°</button></div>
     <div class="control-section" data-control-group="model"><p class="section-kicker">下一次食象</p>
       <div class="action-row"><button class="ghost-button" data-action="next-solar">全球日食</button><button class="ghost-button" data-action="next-lunar">月食</button><button class="ghost-button" data-action="next-local-solar">所在地日食</button></div>
       <p class="inline-status" id="eclipse-status" role="status">${eclipseStatus()}</p>
@@ -681,7 +697,7 @@ function renderControls(): void {
 
 function renderMobileSunControls(): void {
   const controls = document.querySelector<HTMLElement>('#mobile-sun-controls')!
-  const visible = state.sceneId === 'sun-path'
+  const visible = state.sceneId === 'sun-path' || (state.mode === 'real' && PRIMARY_SCENE_IDS.includes(state.sceneId))
   controls.hidden = !visible
   document.body.classList.toggle('sun-quick-visible', visible)
   if (!visible) {
@@ -694,6 +710,7 @@ function renderMobileSunControls(): void {
   const seasonIndex = Math.round(seasonAngle / 90) % 4
   const seasonLabel = Math.abs(seasonAngle % 90) < .5 ? seasonNames[seasonIndex] : `${seasonAngle.toFixed(0)}°`
   const speedOptions = [.25, 1, 4, 16, 64].map((speed) => `<option value="${speed}" ${state.speed === speed ? 'selected' : ''}>${speed}×</option>`).join('')
+  controls.setAttribute('aria-label', state.mode === 'real' ? '真實日期與位置快速調整' : '太陽模型快速調整')
 
   controls.innerHTML = state.mode === 'teaching' ? `
     <div class="sun-quick-grid">
@@ -705,16 +722,15 @@ function renderMobileSunControls(): void {
     <div class="sun-quick-latitudes" aria-label="常用緯度">${[90, 66.5, 45, 23.5, 0, -23.5, -45, -66.5, -90].map((latitude) => `<button data-quick-latitude="${latitude}">${latitude > 0 ? `${latitude}°N` : latitude < 0 ? `${Math.abs(latitude)}°S` : '赤道'}</button>`).join('')}</div>
   ` : `
     <div class="sun-quick-real-grid">
-      <label><span>日期時間</span><input type="datetime-local" value="${toLocalInputValue(new Date(state.instant))}" data-quick-instant aria-label="快速日期"></label>
+      <label><span>日期時間・裝置時區</span><input type="datetime-local" value="${toLocalInputValue(new Date(state.instant))}" data-quick-instant aria-label="快速日期"></label>
       <label><span>緯度</span><input type="number" min="-90" max="90" step=".0001" value="${state.observer.latitude}" data-quick-observer="latitude" aria-label="快速南北位置"></label>
       <label><span>經度</span><input type="number" min="-180" max="180" step=".0001" value="${state.observer.longitude}" data-quick-observer="longitude" aria-label="快速東西位置"></label>
-      <label><span>速度</span><select id="sun-quick-speed" aria-label="快速調整速度">${speedOptions}</select></label>
     </div>
   `
 }
 
 function realControls(): string {
-  return `<label class="field-label">日期與時間
+  return `<label class="field-label">日期與時間（裝置時區）
       <input class="field-input" id="instant-input" type="datetime-local" min="1600-01-01T00:00" max="2600-12-31T23:59" value="${toLocalInputValue(new Date(state.instant))}" />
     </label>
     <div class="coordinate-grid control-row">
@@ -722,7 +738,7 @@ function realControls(): string {
       <label class="field-label">經度<input class="field-input" id="longitude-input" required type="number" min="-180" max="180" step="0.0001" value="${state.observer.longitude}" /></label>
     </div>
     <div class="action-row control-row"><button class="ghost-button" data-action="use-location">使用裝置位置</button><button class="ghost-button" data-action="use-now">回到現在</button></div>
-    <p class="inline-status" id="location-status">只有按下按鈕後才會要求定位權限。</p>`
+    <p class="inline-status" id="location-status">經緯度可手動調整；只有按下「使用裝置位置」才會要求定位權限。民用時區不會依經度自動變更。</p>`
 }
 
 function toLocalInputValue(date: Date): string {
@@ -774,7 +790,8 @@ function timelineLabel(): string {
     const hours = state.timeline * 24
     return `${String(Math.floor(hours)).padStart(2, '0')}:${String(Math.floor(hours % 1 * 60)).padStart(2, '0')}`
   }
-  if (['moon-phases', 'eclipses', 'tides'].includes(state.sceneId)) return moonPhaseFromAngle(state.timeline * 360).name
+  if (state.sceneId === 'eclipses') return moonPhaseFromAngle(teachingEclipsePhase(state.timeline, state.parameters.eclipseType ?? 0)).name
+  if (['moon-phases', 'tides'].includes(state.sceneId)) return moonPhaseFromAngle(state.timeline * 360).name
   return `${Math.round(state.timeline * 360)}°`
 }
 
@@ -889,6 +906,9 @@ app.addEventListener('click', (event) => {
   if (!target) return
   if (target.dataset.view === 'space' || target.dataset.view === 'observer') {
     dispatch({ type: 'set-view', viewMode: target.dataset.view })
+    if (target.dataset.view === 'observer' && state.mode === 'real' && state.sceneId === 'eclipses') {
+      stage.lookAtBody(Math.cos(astronomy.moonPhaseAngle(new Date(state.instant)) * Math.PI / 180) > 0 ? 'Sun' : 'Moon')
+    }
     return
   }
   if (target.dataset.look === 'Sun' || target.dataset.look === 'Moon') {
@@ -951,6 +971,7 @@ app.addEventListener('click', (event) => {
     case 'play': dispatch({ type: 'set-playing', playing: !state.playing }); break
     case 'step': stepSimulation(); break
     case 'reset': resetScene(); break
+    case 'reset-real-inclination': dispatch({ type: 'set-parameter', key: 'hypotheticalInclination', value: 5.145 }); break
     case 'open-panel': setDrawerOpen(true); break
     case 'close-panel': setDrawerOpen(false); break
     case 'toggle-inset': {
@@ -1030,7 +1051,10 @@ app.addEventListener('input', (event) => {
     dispatch({ type: 'set-parameter', key: input.dataset.parameter, value: initialHour }, false)
     document.querySelectorAll('[data-preset]').forEach((button) => button.setAttribute('aria-pressed', 'false'))
     const output = document.querySelector<HTMLOutputElement>(`[data-output="${input.dataset.parameter}"]`)
-    if (output) output.value = input.dataset.parameter === 'observerSolarHour' ? formatSolarHour(value) : `${value}${input.dataset.unit ?? ''}`
+    if (output) output.value = input.dataset.parameter === 'observerSolarHour' ? formatSolarHour(value)
+      : input.dataset.parameter === 'hypotheticalInclination' ? `${value.toFixed(3)}${input.dataset.unit ?? ''}`
+        : `${value}${input.dataset.unit ?? ''}`
+    if (input.dataset.parameter === 'hypotheticalInclination') updateHypothesisBadge()
   }
 })
 

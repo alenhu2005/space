@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Horizon, Observer } from 'astronomy-engine'
 import { createAstronomyProvider, type EclipseSummary, type HorizontalBodyPosition } from '../../src/services/astronomy-provider'
+import { realSolarAppearance } from '../../src/core/observer-eclipse'
 
 const provider = createAstronomyProvider()
 const taipei = { latitude: 25.033, longitude: 121.5654, elevation: 10 }
@@ -39,6 +40,23 @@ describe('AstronomyProvider', () => {
     const phase = provider.moonPhaseAngle(new Date('2024-04-08T18:21:00Z'))
     expect(Math.min(phase, 360 - phase)).toBeLessThan(1)
     expect(Math.abs(provider.moonEclipticLatitude(new Date('2024-04-08T18:21:00Z')))).toBeLessThan(.5)
+  })
+
+  it('keeps actual eclipse coordinates by default and changes both geometry and local sky in the labelled inclination experiment', () => {
+    const instant = new Date('2024-04-08T18:40:00Z')
+    const dallas = { latitude: 32.7767, longitude: -96.797, elevation: 130 }
+    const actual = provider.moonAtInclination(instant, dallas, 5.145)
+    const flat = provider.moonAtInclination(instant, dallas, 0)
+    const tilted = provider.moonAtInclination(instant, dallas, 15)
+    expect(actual.horizontal).toEqual(provider.horizontalPosition('Moon', instant, dallas))
+    expect(actual.vector).toEqual(provider.geocentricVector('Moon', instant))
+    expect(flat.eclipticLatitude).toBeCloseTo(0, 10)
+    expect(Math.abs(tilted.eclipticLatitude)).toBeGreaterThan(Math.abs(actual.eclipticLatitude) * 2.5)
+    const length = (v: typeof actual.vector) => Math.hypot(v.x, v.y, v.z)
+    expect(length(tilted.vector)).toBeCloseTo(length(actual.vector), 12)
+    const sun = provider.horizontalPosition('Sun', instant, dallas)
+    expect(realSolarAppearance(sun, actual.horizontal).kind).not.toBe('none')
+    expect(realSolarAppearance(sun, tilted.horizontal).kind).toBe('none')
   })
 
   it('finds the nearest real instant for an arbitrary teaching moon phase', () => {

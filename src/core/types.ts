@@ -50,6 +50,7 @@ export interface ScenePreset {
   readonly label: string
   readonly description: string
   readonly parameters: Readonly<Record<string, number>>
+  readonly timeline?: number
   readonly cameraPreset?: string
   readonly instant?: string
 }

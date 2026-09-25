@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { teachingSolarTime } from '../../src/core/moon-observer'
+import { teachingEclipseSolarTime, teachingSolarTime } from '../../src/core/moon-observer'
 import { LabPage } from './pages/LabPage'
 
 const primaryScenes = [
@@ -152,6 +152,23 @@ test('分享網址會還原場景、模式、預設與位置', async ({ page }) 
   await expect(page.getByLabel('經度')).toHaveValue('121')
 })
 
+test('手機真實模式的太陽、月相、日月食都可直接調經緯度', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile')
+  const lab = new LabPage(page)
+  for (const scene of ['sun-path', 'moon-phases', 'eclipses']) {
+    await lab.open(`?scene=${scene}&mode=real&view=observer&time=2024-04-08T18%3A42%3A37Z&lat=32.7767&lon=-96.797`)
+    const quick = page.getByRole('region', { name: '真實日期與觀測經緯度快速調整' })
+    await expect(quick).toBeVisible()
+    await quick.getByLabel('快速南北位置').fill('25.033')
+    await quick.getByLabel('快速南北位置').press('Tab')
+    await expect(page).toHaveURL(/lat=25\.0330/)
+    await quick.getByLabel('快速東西位置').fill('121.5654')
+    await quick.getByLabel('快速東西位置').press('Tab')
+    await expect(page).toHaveURL(/lon=121\.5654/)
+    await expect(page.locator('#observer-place')).toContainText('25.03°N')
+  }
+})
+
 test('太陽雙視窗共用時間與季節，旋轉與螢幕方向可獨立操作', async ({ page }) => {
   const lab = new LabPage(page)
   await lab.open('?scene=sun-path&preset=june-solstice&t=0.5')
@@ -288,7 +305,7 @@ test('定位拒絕時保留手動操作', async ({ page, context }) => {
 
 test('地表附近可從地球夜側觀察全月食與偏月食', async ({ page }) => {
   const lab = new LabPage(page)
-  await lab.open('?scene=eclipses&preset=total-lunar')
+  await lab.open('?scene=eclipses&preset=total-lunar&t=0.5')
   await skipIfWebGLUnavailable(page)
   await selectPrimaryCamera(page, lab, 'surface')
   await showInsetInformation(page)
@@ -299,6 +316,7 @@ test('地表附近可從地球夜側觀察全月食與偏月食', async ({ page 
   await lab.openControls()
   await lab.selectControlTab('模型')
   await page.getByRole('button', { name: '月偏食 月球部分進入本影', exact: true }).click()
+  await page.locator('#timeline').fill('0.5')
   await lab.closeControls()
   await selectPrimaryCamera(page, lab, 'surface')
   await expect(page.getByText('地球夜側・所見月面', { exact: true })).toBeVisible()
@@ -307,16 +325,16 @@ test('地表附近可從地球夜側觀察全月食與偏月食', async ({ page 
   await expect(page.locator('[data-camera="surface"]')).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('真實模式區分下點示意與所在地，地平線下不顯示所見圓盤', async ({ page }) => {
+test('真實模式的地表鏡頭位於選定地點，地平線下不顯示所見圓盤', async ({ page }) => {
   const lab = new LabPage(page)
-  for (const [instant, subpoint, belowHorizon] of [
-    ['2025-03-14T07:00:00Z', '月下點', '月球在地平線下'],
-    ['2024-04-08T18:17:00Z', '日下點', '太陽在地平線下']
+  for (const [instant, belowHorizon] of [
+    ['2025-03-14T07:00:00Z', '月球在地平線下'],
+    ['2024-04-08T18:17:00Z', '太陽在地平線下']
   ]) {
     await lab.open(`?scene=eclipses&mode=real&camera=surface&time=${instant}&lat=25.033&lon=121.5654`)
     await skipIfWebGLUnavailable(page)
     await showInsetInformation(page)
-    await expect(page.locator('.surface-view-note')).toHaveText(`${subpoint} 3D 示意・非選定所在地`)
+    await expect(page.locator('.surface-view-note')).toHaveText('鏡頭位於選定經緯度上方・天體尺寸非等比例')
     await expect(page.getByText(belowHorizon!, { exact: true })).toBeVisible()
     expect(await page.locator('.scene-inset canvas').evaluate((element) => {
       const canvas = element as HTMLCanvasElement
@@ -496,9 +514,12 @@ test('每個場景的所有預設、相機與圖層都可操作', async ({ page 
       await expect.poll(() => {
         const value = new URL(page.url()).searchParams.get(`p.${key}`)
         if (value === null) return NaN
-        return key === 'observerSolarHour' && label === '月相'
-          ? teachingSolarTime(Number(value), Number(new URL(page.url()).searchParams.get('t')))
-          : Number(value)
+        if (key === 'observerSolarHour') {
+          const timeline = Number(new URL(page.url()).searchParams.get('t'))
+          if (label === '月相') return teachingSolarTime(Number(value), timeline)
+          if (label === '日月食') return teachingEclipseSolarTime(Number(value), timeline, Number(new URL(page.url()).searchParams.get('p.eclipseType') ?? 0))
+        }
+        return Number(value)
       }).toBeCloseTo(Number(await control.inputValue()), key === 'observerSolarHour' && label === '月相' ? 1 : 5)
     }
     await lab.selectControlTab('顯示')

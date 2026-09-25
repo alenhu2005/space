@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { classifySolarShadow, classifyLunarShadow, computeShadowGeometry, shadowRadius, teachingOrbitPosition, type ShadowGeometry } from '../core/geometry'
-import { teachingLunarShadow } from '../core/observer-eclipse'
+import { TEACHING_ECLIPSE, lunarAppearanceFromShadow, realSolarAppearance, teachingLunarShadow, type SolarAppearance } from '../core/observer-eclipse'
 import { degreesToRadians, radiansToDegrees, moonPhaseFromAngle } from '../core/astro-math'
-import { earthTextureSurfaceDirection, teachingEarthRotation, teachingEclipseSolarTime } from '../core/moon-observer'
-import { COLORS, createSun, createEarth, createMoon, createArrow, createConeBetween, updateConeBetween, lineFromPoints } from '../rendering/helpers'
+import { earthTextureSurfaceDirection, teachingEarthRotation, teachingEclipsePhase, teachingEclipseSolarTime } from '../core/moon-observer'
+import { COLORS, createSun, createEarth, createMoon, createArrow, createConeBetween, updateConeBetween, lineFromPoints, orientMoonNearSide } from '../rendering/helpers'
 import { addLabel, parameter, applyLayers, sunAlignedVector, type BuildContext, type SceneVisual } from './shared'
 import { createPhaseDisc } from './moon-disc'
 
@@ -11,7 +11,7 @@ const AU_KM = 149597870.7
 const EARTH_RADIUS = 6378.137
 const MOON_RADIUS = 1737.4
 const SUN_RADIUS = 695700
-const NAMES = { miss: '無食象', total: '全食', partial: '偏食', annular: '環食', penumbral: '半影月食' } as const
+const NAMES = { miss: '無食象', none: '無食象', total: '全食', partial: '偏食', annular: '環食', penumbral: '半影月食' } as const
 
 function orbitPosition(longitude: number, inclination: number, node: number, radius: number): THREE.Vector3 {
   const position = teachingOrbitPosition(longitude, inclination, node, radius)
@@ -20,9 +20,9 @@ function orbitPosition(longitude: number, inclination: number, node: number, rad
 
 export function createEclipses(context: BuildContext): SceneVisual {
   const root = new THREE.Group()
-  const sun = createSun(.72)
-  sun.position.set(-5.6, 0, 0)
-  const earth = createEarth(.66, context.earthTextureUrl)
+  const sun = createSun(TEACHING_ECLIPSE.sunRadius)
+  sun.position.set(1.8 - TEACHING_ECLIPSE.sunDistance, 0, 0)
+  const earth = createEarth(TEACHING_ECLIPSE.earthRadius, context.earthTextureUrl)
   earth.position.set(1.8, 0, 0)
   const moon = createMoon(.25, context.moonTextureUrl)
   root.add(sun, earth, moon)
@@ -72,9 +72,9 @@ export function createEclipses(context: BuildContext): SceneVisual {
   const draw = inset.getContext('2d')
   let cachedOrbit = ''
   let lastInsetKey = ''
-  let lunarSurface: { state: Parameters<SceneVisual['update']>[0]; shadow: ShadowGeometry; phaseAngle: number } | undefined
+  let lunarSurface: { state: Parameters<SceneVisual['update']>[0]; shadow: ShadowGeometry; phaseAngle: number; moonAltitude: number } | undefined
   const moonDisc = createPhaseDisc(context.moonTextureUrl, () => {
-    if (lunarSurface) drawLunarSurface(lunarSurface.state, lunarSurface.shadow, lunarSurface.phaseAngle)
+    if (lunarSurface) drawLunarSurface(lunarSurface.state, lunarSurface.shadow, lunarSurface.phaseAngle, lunarSurface.moonAltitude)
   })
   const cameras = [
     { id: 'side', label: '太空影錐', position: new THREE.Vector3(-.8, 4.5, 14), target: new THREE.Vector3(-.8, 0, 0) },
@@ -114,33 +114,29 @@ export function createEclipses(context: BuildContext): SceneVisual {
     convention.textContent = '截面等比例・影區以顏色標示'
   }
 
-  function drawLocal(state: Parameters<SceneVisual['update']>[0]): void {
+  function drawLocal(state: Parameters<SceneVisual['update']>[0], appearance: SolarAppearance): void {
     if (!draw) return
-    const key = `local-${state.instant}-${state.observer.latitude}-${state.observer.longitude}`
+    const key = `local-${state.instant}-${state.observer.latitude}-${state.observer.longitude}-${state.parameters.hypotheticalInclination}`
     if (key === lastInsetKey) return
     lastInsetKey = key
-    const instant = new Date(state.instant)
-    const sunPosition = context.astronomy.horizontalPosition('Sun', instant, state.observer)
-    const moonPosition = context.astronomy.horizontalPosition('Moon', instant, state.observer)
-    const sourceRadius = radiansToDegrees(Math.asin(SUN_RADIUS / (sunPosition.distanceAu * AU_KM)))
-    const blockerRadius = radiansToDegrees(Math.asin(MOON_RADIUS / (moonPosition.distanceAu * AU_KM)))
-    const deltaAzimuth = ((moonPosition.azimuth - sunPosition.azimuth + 540) % 360 - 180) * Math.cos(degreesToRadians(sunPosition.altitude))
-    const deltaAltitude = moonPosition.altitude - sunPosition.altitude
     draw.clearRect(0, 0, 160, 160)
-    caption.textContent = sunPosition.altitude > 0 ? '所在地・太陽所見' : '太陽在地平線下'
+    caption.textContent = appearance.sunAboveHorizon ? '所在地・太陽所見' : '太陽在地平線下'
     convention.textContent = '相對角徑・天頂向上'
-    if (sunPosition.altitude <= 0) return
+    if (!appearance.sunAboveHorizon) return
     draw.fillStyle = '#f7b955'
     draw.beginPath()
     draw.arc(80, 80, 40, 0, Math.PI * 2)
     draw.fill()
+    if (appearance.kind === 'none') return
     draw.fillStyle = '#020406'
     draw.beginPath()
-    draw.arc(80 + deltaAzimuth / sourceRadius * 40, 80 - deltaAltitude / sourceRadius * 40, blockerRadius / sourceRadius * 40, 0, Math.PI * 2)
+    draw.arc(80 + appearance.moonOffsetXDegrees / appearance.sunRadiusDegrees * 40,
+      80 - appearance.moonOffsetYDegrees / appearance.sunRadiusDegrees * 40,
+      appearance.moonRadiusDegrees / appearance.sunRadiusDegrees * 40, 0, Math.PI * 2)
     draw.fill()
   }
 
-  function drawLunarSurface(state: Parameters<SceneVisual['update']>[0], shadow: ShadowGeometry, phaseAngle: number): void {
+  function drawLunarSurface(state: Parameters<SceneVisual['update']>[0], shadow: ShadowGeometry, phaseAngle: number, moonAltitude: number): void {
     if (!draw) return
     const instant = new Date(state.instant)
     const fraction = state.mode === 'real' ? context.astronomy.moonIlluminationFraction(instant) : moonPhaseFromAngle(phaseAngle).illumination
@@ -150,7 +146,7 @@ export function createEclipses(context: BuildContext): SceneVisual {
     if (key === lastInsetKey) return
     lastInsetKey = key
     draw.clearRect(0, 0, 160, 160)
-    const aboveHorizon = state.mode === 'teaching' || context.astronomy.horizontalPosition('Moon', instant, state.observer).altitude > 0
+    const aboveHorizon = state.mode === 'teaching' || moonAltitude > 0
     caption.textContent = state.mode === 'teaching' ? '地球夜側・所見月面'
       : aboveHorizon ? '所在地・所見月面' : '月球在地平線下'
     convention.textContent = '月面亮暗示意・忽略大氣'
@@ -184,21 +180,23 @@ export function createEclipses(context: BuildContext): SceneVisual {
     update(state) {
       const instant = new Date(state.instant)
       const real = state.mode === 'real'
-      const phaseAngle = real ? context.astronomy.moonPhaseAngle(instant) : state.timeline * 360
+      const phaseAngle = real ? context.astronomy.moonPhaseAngle(instant) : teachingEclipsePhase(state.timeline, parameter(state, context.definition, 'eclipseType'))
       const phase = degreesToRadians(phaseAngle)
       const solar = Math.cos(phase) > 0
-      const inclination = degreesToRadians(real ? 5.145 : parameter(state, context.definition, 'inclination'))
+      const realInclination = Math.max(0, Math.min(15, parameter(state, context.definition, 'hypotheticalInclination')))
+      const hypothetical = real && Math.abs(realInclination - 5.145) > 1e-6
+      const inclination = degreesToRadians(real ? realInclination : parameter(state, context.definition, 'inclination'))
       const node = degreesToRadians(parameter(state, context.definition, 'nodeOffset'))
       const annular = !real && parameter(state, context.definition, 'eclipseType') === 2
-      const distance = annular ? 3 : 1.6
-      const moonRadius = annular ? .195 : .25
+      const distance = annular ? TEACHING_ECLIPSE.annularOrbitRadius : TEACHING_ECLIPSE.orbitRadius
+      const moonRadius = annular ? TEACHING_ECLIPSE.annularMoonRadius : TEACHING_ECLIPSE.moonRadius
       const nearAlignment = Math.abs(Math.cos(phase)) > .985
       let source = sun.position.clone()
       let blocker: THREE.Vector3
       let target: THREE.Vector3
-      let sourceRadius = .72
-      let blockerRadius = solar ? moonRadius : .66
-      let targetRadius = solar ? .66 : moonRadius
+      let sourceRadius: number = TEACHING_ECLIPSE.sunRadius
+      let blockerRadius: number = solar ? moonRadius : TEACHING_ECLIPSE.earthRadius
+      let targetRadius: number = solar ? TEACHING_ECLIPSE.earthRadius : moonRadius
       let mapPosition = (vector: THREE.Vector3) => vector.clone()
       let radiusScale = 1
       let latitude = radiansToDegrees(Math.atan(Math.tan(inclination) * Math.sin(phase - node)))
@@ -211,17 +209,18 @@ export function createEclipses(context: BuildContext): SceneVisual {
       if (real) {
         const realSun = context.astronomy.geocentricVector('Sun', instant)
         realSunVector = realSun
-        const realMoon = context.astronomy.geocentricVector('Moon', instant)
+        const moonNow = context.astronomy.moonAtInclination(instant, state.observer, realInclination)
+        const realMoon = moonNow.vector
         source = sunAlignedVector(realSun, realSun).multiplyScalar(AU_KM)
         const physicalMoon = sunAlignedVector(realMoon, realSun).multiplyScalar(AU_KM)
         const moonDistance = physicalMoon.length()
         realFirst = physicalMoon.clone().normalize()
-        const tomorrow = context.astronomy.geocentricVector('Moon', new Date(instant.getTime() + 86400000))
+        const tomorrow = context.astronomy.moonAtInclination(new Date(instant.getTime() + 86400000), state.observer, realInclination).vector
         const normal = realFirst.clone().cross(sunAlignedVector(tomorrow, realSun).normalize()).normalize()
         realSecond = normal.clone().cross(realFirst).normalize()
         realNode = new THREE.Vector3(normal.z, 0, -normal.x).normalize()
         if (normal.clone().cross(realNode).y < 0) realNode.negate()
-        latitude = context.astronomy.moonEclipticLatitude(instant)
+        latitude = moonNow.eclipticLatitude
         radiusScale = .66 / EARTH_RADIUS
         mapPosition = (vector) => new THREE.Vector3(vector.x * distance / moonDistance, vector.y * radiusScale, vector.z * radiusScale).add(earth.position)
         moon.position.copy(nearAlignment ? mapPosition(physicalMoon) : physicalMoon.clone().normalize().multiplyScalar(distance).add(earth.position))
@@ -252,10 +251,18 @@ export function createEclipses(context: BuildContext): SceneVisual {
       observerPointer.position.copy(localObserver).multiplyScalar(.75)
       observerPointer.setDirection(localObserver)
       observerPointer.setLength(.24, .075, .04)
-      observerLabel.position.copy(localObserver.applyQuaternion(earth.quaternion)).multiplyScalar(1.08).add(earth.position)
+      const worldObserver = localObserver.clone().applyQuaternion(earth.quaternion)
+      observerLabel.position.copy(worldObserver).multiplyScalar(1.08).add(earth.position)
+      if (real && realSunVector) {
+        const physicalObserver = sunAlignedVector(context.astronomy.observerVector(instant, state.observer), realSunVector).normalize()
+        overlay.dataset.observerTextureAlignment = String(worldObserver.angleTo(physicalObserver) < degreesToRadians(.3))
+      } else delete overlay.dataset.observerTextureAlignment
       const shadow = !real && !solar
         ? teachingLunarShadow(phaseAngle, parameter(state, context.definition, 'nodeOffset'), parameter(state, context.definition, 'inclination'))
         : computeShadowGeometry({ source, blocker, target, sourceRadius, blockerRadius, targetRadius })
+      for (const [mesh, opacity] of [[umbra, real ? .55 : .32], [antumbra, real ? .34 : .2], [penumbra, real ? .22 : .1]] as const) {
+        (mesh.material as THREE.MeshBasicMaterial).opacity = opacity
+      }
       const axis = new THREE.Vector3(shadow.axis.x, shadow.axis.y, shadow.axis.z)
       const endDistance = Math.max(targetRadius * 2, shadow.axialDistanceKm + targetRadius * 1.6)
       const at = (behind: number) => mapPosition(blocker.clone().addScaledVector(axis, behind))
@@ -263,7 +270,7 @@ export function createEclipses(context: BuildContext): SceneVisual {
       updateConeBetween(umbra, at(0), at(apexDistance), blockerRadius * radiusScale, Math.max(.0001, shadowRadius(sourceRadius, blockerRadius, shadow.separationKm, apexDistance, false) * radiusScale))
       updateConeBetween(antumbra, at(apexDistance), at(endDistance + .0001), .0001, Math.abs(shadowRadius(sourceRadius, blockerRadius, shadow.separationKm, endDistance, false)) * radiusScale)
       updateConeBetween(penumbra, at(0), at(endDistance), blockerRadius * radiusScale, shadowRadius(sourceRadius, blockerRadius, shadow.separationKm, endDistance, true) * radiusScale)
-      const orbitKey = real ? 'real-' + instant.toISOString().slice(0, 13) : [inclination, node, distance].join('-')
+      const orbitKey = real ? `real-${instant.toISOString().slice(0, 13)}-${realInclination}` : [inclination, node, distance].join('-')
       if (cachedOrbit !== orbitKey) {
         const points = Array.from({ length: 181 }, (_, index) => {
           const angle = index / 180 * Math.PI * 2
@@ -280,37 +287,49 @@ export function createEclipses(context: BuildContext): SceneVisual {
         descending.position.copy(realNode).multiplyScalar(-distance).add(earth.position).add(new THREE.Vector3(0, .22, 0))
       }
       cameras[1]!.position.copy(moon.position).add(new THREE.Vector3(.55, .55, 1.4))
-      const surfaceDirection = (solar ? sun : moon).position.clone().sub(earth.position).normalize()
-      cameras[2]!.position.copy(earth.position).addScaledVector(surfaceDirection, .7)
+      cameras[0]!.position.set(real ? 1 : -.8, real ? 2.4 : 4.5, real ? 7.4 : 14)
+      cameras[0]!.target.set(real ? 1 : -.8, 0, 0)
+      cameras[2]!.position.copy(earth.position).addScaledVector(worldObserver, .7)
       cameras[2]!.target.copy((solar ? sun : moon).position)
       cameras[3]!.position.copy(moon.position).add(new THREE.Vector3(0, .5, 1.7))
       cameras[3]!.target.copy(moon.position)
-      moon.lookAt(earth.position)
+      orientMoonNearSide(moon, earth.position)
       moonLabel.position.copy(moon.position).add(new THREE.Vector3(0, .55, 0))
       applyLayers(root, state)
       antumbra.visible = state.layers.shadows && endDistance > shadow.apexDistanceKm
       shadowGroup.visible = state.cameraPreset !== 'surface' && (!real || nearAlignment)
+      overlay.dataset.shadowVisible = String(shadowGroup.visible && state.layers.shadows)
       orbit.visible = state.layers.paths && (!real || !nearAlignment)
       ascending.visible = descending.visible = state.layers.labels && (!real || !nearAlignment)
       ascending.userData.modeHidden = descending.userData.modeHidden = real && nearAlignment
       const classification = solar ? classifySolarShadow(shadow) : classifyLunarShadow(shadow)
+      const localMoon = real ? context.astronomy.moonAtInclination(instant, state.observer, realInclination).horizontal : undefined
+      const localMoonAltitude = localMoon?.altitude ?? 0
+      const localAppearance = real ? solar
+        ? realSolarAppearance(context.astronomy.horizontalPosition('Sun', instant, state.observer), localMoon!)
+        : lunarAppearanceFromShadow(shadow, localMoonAltitude)
+        : undefined
+      const localDescription = localAppearance?.visible ? `此地${NAMES[localAppearance.kind]}`
+        : localAppearance?.type === 'solar' && !localAppearance.sunAboveHorizon ? '此地太陽在地平線下'
+          : real && !solar && localMoonAltitude < 0 ? '此地月球在地平線下' : '此地無食象'
       const moonMaterial = moon.material as THREE.MeshStandardMaterial
       // A subdued, texture-mapped teaching fill keeps the eclipsed lunar disc legible.
       moonMaterial.emissive.setHex(!solar && classification !== 'miss' ? 0x354057 : 0x000000)
       moonMaterial.emissiveIntensity = .6
       surfaceViewNote.hidden = !real || state.cameraPreset !== 'surface'
-      surfaceViewNote.textContent = `${solar ? '日下點' : '月下點'} 3D 示意・非選定所在地`
-      lunarSurface = state.cameraPreset === 'surface' && !solar ? { state, shadow, phaseAngle } : undefined
-      if (lunarSurface) drawLunarSurface(state, shadow, phaseAngle)
-      else if (real && state.cameraPreset === 'surface' && solar) drawLocal(state)
+      surfaceViewNote.textContent = '鏡頭位於選定經緯度上方・天體尺寸非等比例'
+      lunarSurface = state.cameraPreset === 'surface' && !solar ? { state, shadow, phaseAngle, moonAltitude: localMoonAltitude } : undefined
+      if (lunarSurface) drawLunarSurface(state, shadow, phaseAngle, localMoonAltitude)
+      else if (real && state.cameraPreset === 'surface' && solar) drawLocal(state, localAppearance as SolarAppearance)
       else drawSection(shadow, solar)
       const phenomenon = classification === 'miss' ? '無食象・未對齊交點' : NAMES[classification] + (solar ? '（全球某處）' : '（地球夜側）')
-      phenomenonCaption.textContent = `${solar ? '日食' : '月食'}：${classification === 'miss' ? '未形成食象' : NAMES[classification]}`
+      phenomenonCaption.textContent = real ? `${hypothetical ? '傾角假設・' : ''}${solar ? '日食' : '月食'}：全球${classification === 'miss' ? '無食象' : NAMES[classification]}・${localDescription}`
+        : `${solar ? '日食' : '月食'}：${classification === 'miss' ? '未形成食象' : NAMES[classification]}`
       legend.hidden = !state.layers.shadows
       legend.querySelector<HTMLElement>('.antumbra-legend')!.hidden = shadow.umbraRadiusKm >= 0
       return [
-        { label: '現象・直線光影', value: phenomenon },
-        { label: real ? '實際軌道傾角' : '教學軌道傾角', value: radiansToDegrees(inclination).toFixed(1) + '°' },
+        ...(real ? [{ label: '所在地食象', value: localDescription }, { label: '全球食象', value: phenomenon }] : [{ label: '現象・直線光影', value: phenomenon }]),
+        { label: real ? hypothetical ? '假設月軌傾角' : '月軌傾角・約' : '教學軌道傾角', value: radiansToDegrees(inclination).toFixed(real ? 3 : 1) + '°' },
         { label: '月球黃道緯度', value: latitude.toFixed(1) + '°' },
         { label: real ? '影軸偏距' : '影軸偏距・示意', value: shadow.axisOffsetKm.toFixed(real ? 0 : 2) + (real ? ' km' : ' 單位') },
         { label: '本影半徑・負值為偽本影', value: shadow.umbraRadiusKm.toFixed(real ? 0 : 2) + (real ? ' km' : ' 單位') },

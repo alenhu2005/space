@@ -89,17 +89,18 @@ const definitions: readonly SceneDefinition[] = [
     misconception: '朔望不一定發生日月食，因為月球軌道面相對黃道面傾斜約 5.1°。',
     controls: [
       { key: 'inclination', label: '教學傾角・實際約 5.1°', min: 0, max: 60, step: .1, unit: '°' },
+      { key: 'hypotheticalInclination', label: '假設月軌傾角・實際約 5.145°', min: 0, max: 15, step: .005, unit: '°', onlyInReal: true, availableInReal: true },
       { key: 'nodeOffset', label: '交點經度・朔方向起算', min: 0, max: 360, step: 1, unit: '°' },
       { key: 'observerLatitude', label: '教學觀測緯度・中心線在赤道', min: -90, max: 90, step: .1, unit: '°' },
       { key: 'observerSolarHour', label: '地面觀測當地太陽時', min: 0, max: 23.75, step: .25, unit: '' }
     ],
-    defaultParameters: { phase: 0, nodeOffset: 0, inclination: 25, eclipseType: 0, observerLatitude: 0, observerSolarHour: 12 },
+    defaultParameters: { nodeOffset: 0, inclination: 25, hypotheticalInclination: 5.145, eclipseType: 0, observerLatitude: 0, observerSolarHour: 12 },
     presets: [
-      { id: 'total-solar', label: '日全食', description: '月球本影落在地球', parameters: { phase: 0, nodeOffset: 0, inclination: 25, eclipseType: 0, observerLatitude: 0, observerSolarHour: 12 }, cameraPreset: 'side' },
-      { id: 'partial-solar', label: '日偏食', description: '地球僅進入半影', parameters: { phase: 0, nodeOffset: 90, inclination: 25, eclipseType: 1, observerLatitude: 0, observerSolarHour: 12 }, cameraPreset: 'side' },
-      { id: 'annular-solar', label: '日環食', description: '月球視直徑較小', parameters: { phase: 0, nodeOffset: 0, inclination: 25, eclipseType: 2, observerLatitude: 0, observerSolarHour: 12 }, cameraPreset: 'side' },
-      { id: 'total-lunar', label: '月全食', description: '月球進入地球本影', parameters: { phase: 180, nodeOffset: 0, inclination: 25, eclipseType: 3, observerLatitude: 0, observerSolarHour: 0 }, cameraPreset: 'side' },
-      { id: 'partial-lunar', label: '月偏食', description: '月球部分進入本影', parameters: { phase: 180, nodeOffset: 50, inclination: 25, eclipseType: 4, observerLatitude: 0, observerSolarHour: 0 }, cameraPreset: 'side' }
+      { id: 'total-solar', label: '日全食', description: '月球本影落在地球', parameters: { nodeOffset: 0, inclination: 25, eclipseType: 0, observerLatitude: 0, observerSolarHour: 12 }, timeline: .1, cameraPreset: 'side' },
+      { id: 'partial-solar', label: '日偏食', description: '地球僅進入半影', parameters: { nodeOffset: 90, inclination: 25, eclipseType: 1, observerLatitude: -40, observerSolarHour: 12 }, timeline: .1, cameraPreset: 'side' },
+      { id: 'annular-solar', label: '日環食', description: '月球視直徑較小', parameters: { nodeOffset: 0, inclination: 25, eclipseType: 2, observerLatitude: 0, observerSolarHour: 12 }, timeline: .1, cameraPreset: 'side' },
+      { id: 'total-lunar', label: '月全食', description: '月球進入地球本影', parameters: { nodeOffset: 0, inclination: 25, eclipseType: 3, observerLatitude: 0, observerSolarHour: 0 }, timeline: .1, cameraPreset: 'side' },
+      { id: 'partial-lunar', label: '月偏食', description: '月球部分進入本影', parameters: { nodeOffset: 50, inclination: 25, eclipseType: 4, observerLatitude: 0, observerSolarHour: 0 }, timeline: .1, cameraPreset: 'side' }
     ]
   },
   {
